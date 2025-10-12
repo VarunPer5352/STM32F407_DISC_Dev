@@ -16,6 +16,7 @@
  ******************************************************************************
  */
 
+#include "main.h" 
 #include <stdint.h>
 
 #if !defined(__SOFT_FP__) && defined(__ARM_FP)
@@ -25,5 +26,24 @@
 int main(void)
 {
     /* Loop forever */
-	for(;;);
+	  while (1)
+	  {
+        
+        
+	  }
 }
+
+/**
+  * @brief  This function is executed in case of error occurrence.
+  * @retval None
+  */
+void Error_Handler(void)
+{
+  /* USER CODE BEGIN Error_Handler_Debug */
+  /* User can add his own implementation to report the HAL error return state */
+  __disable_irq();
+  while (1)
+  {
+  }
+  /* USER CODE END Error_Handler_Debug */
+} 
