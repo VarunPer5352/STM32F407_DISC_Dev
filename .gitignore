@@ -1,2 +1,6 @@
 # STM32CubeIDE / Eclipse workspace junk
 .metadata/
+
+**/Debug/
+**/.cproject
+**/.settings/language.settings.xml
