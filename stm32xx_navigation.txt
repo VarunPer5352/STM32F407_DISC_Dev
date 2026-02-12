@@ -1,0 +1,2 @@
+* Peripheral_memory_map -> Search this to get the addrs of all the periph's
+* 
