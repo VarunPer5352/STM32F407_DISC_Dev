@@ -87,6 +87,15 @@ typedef struct
                             This parameter can be a value of @ref GPIO_Alternate_function_selection */
 }GPIO_InitTypeDef;
 
+/*
+ * This is a Handle Structure for GPIO pin 
+ */
+typedef struct
+{
+    GPIO_TypeDef *pGPIOx; /* Pointer to address of Port Instance i.e. Reg's location */
+    GPIO_InitTypeDef Pin_Settings; /* The various settings of the individual pin of above port */
+}GPIO_HandleTypeDef;
+
 /** 
   * @brief  GPIO Bit SET and Bit RESET enumeration 
   */
