@@ -217,16 +217,36 @@ typedef enum
 /** @defgroup Function Declarations/Prototypes
   * @brief Declarations & prototypes of all the necessary functions.
   */ 
-void gpio_clk_ctrl(void);
-void gpio_init(void);
-void gpio_deinit(void);
-void gpio_set_pin_level(void); // Write or O/P out of Gpios
-void gpio_set_port_level(void); // Optional
-void gpio_get_pin_level(void); // Read or input of Gpios
-void gpio_get_port_level(void); // Optional
-void gpio_toggle_pin_level(void);
-void gpio_irq_config(void); /* This func configures the exact IRQ's priority & stuff */
-void gpio_irq_handler(void); /* This is the handler to be executed. */
+/*
+* 1. This function needs 2 inputs the address to registers, & the state{macros} i.e. ENABLE{1} or DIABLE{0}
+*/
+void gpio_clk_ctrl(GPIO_TypeDef *pGPIOx, uint8_t state);
+
+/*
+* 2. The init & Deinit functions require just the handle struct as input
+*/
+void gpio_init(GPIO_HandleTypeDef *pGPIO_Handle); // This will init the registers pointed to the given handle
+void gpio_deinit(GPIO_TypeDef *pGPIOx); // Only needs the periph addr, as in RCC reg's there is a reset bit that will reset the entire GPIOx once its set to '1'
+
+/*
+* 3. Data Read/Write functions
+*/
+void gpio_set_pin_level(GPIO_TypeDef *pGPIOx, uint8_t pin_number, uint8_t state); // Write or O/P out of Gpios, state is what level to set the pin as ?
+void gpio_set_port_level(GPIO_TypeDef *pGPIOx, uint16_t state); // Optional, the state will apply to all pins in a port
+uint8_t gpio_get_pin_level(GPIO_TypeDef *pGPIOx, uint8_t pin_number); // Read or input of Gpios
+uint16_t gpio_get_port_level(GPIO_TypeDef *pGPIOx); // Optional, since a port has 16 pins return type should be 16bits, each representing 1 pin?
+void gpio_toggle_pin_level(GPIO_TypeDef *pGPIOx, uint8_t pin_number); // Just inverting existing state with some XOR logic.
+
+/*
+* 4. Interrupt Config & Handling
+*/
+/*
+1. IRQn_Type :- a list of IRQ numbers enum type in stm32f407xx.h ok
+2. IRQ_Priority :- The current priority u want to set it as{some arent settable}
+3. state :- Either enabel or disable the IRQ
+*/
+void gpio_irq_config(uint8_t IRQn_Type, uint8_t IRQ_Priority, uint8_t state); // This func configures the exact IRQ's priority & stuff,
+void gpio_irq_handler(uint8_t pin_number); /* This is the handler to be executed, takes pin number for which pin "EXTI" line its effective for. */
 
 
 #endif /* INC_GPIO_H_ */
