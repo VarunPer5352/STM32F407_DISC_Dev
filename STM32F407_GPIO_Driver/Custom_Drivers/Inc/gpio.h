@@ -214,4 +214,19 @@ typedef enum
 #define TRIGGER_RISING                          (0x1UL << TRIGGER_MODE_Pos)
 #define TRIGGER_FALLING                         (0x2UL << TRIGGER_MODE_Pos)
 
+/** @defgroup Function Declarations/Prototypes
+  * @brief Declarations & prototypes of all the necessary functions.
+  */ 
+void gpio_clk_ctrl(void);
+void gpio_init(void);
+void gpio_deinit(void);
+void gpio_set_pin_level(void); // Write or O/P out of Gpios
+void gpio_set_port_level(void); // Optional
+void gpio_get_pin_level(void); // Read or input of Gpios
+void gpio_get_port_level(void); // Optional
+void gpio_toggle_pin_level(void);
+void gpio_irq_config(void); /* This func configures the exact IRQ's priority & stuff */
+void gpio_irq_handler(void); /* This is the handler to be executed. */
+
+
 #endif /* INC_GPIO_H_ */
