@@ -293,6 +293,23 @@ typedef struct
     __IO uint32_t BSRR;     /*!< GPIO port bit set/reset register,      Address offset: 0x18      */
     __IO uint32_t LCKR;     /*!< GPIO port configuration lock register, Address offset: 0x1C      */
     __IO uint32_t AFR[2];   /*!< GPIO alternate function registers,     Address offset: 0x20-0x24 */
-}GPIO_RegDef_t;
+}GPIO_RegDef_t; // __IO is basically volatile type qualifier!
+
+/*
+GPIOA_BASE is just a number (0x40020000).
+We cast it to (GPIO_RegDef_t *) so the compiler treats that address
+as a pointer to a GPIO register structure.
+This allows us to access registers using: GPIOA->MODER or GPIOA->ODR
+Instead of manually computing addresses like: *(uint32_t *)(GPIOA_BASE + offset{for MODER, ODR etc})
+*/
+#define GPIOA ((GPIO_RegDef_t *)GPIOA_BASE)
+#define GPIOB ((GPIO_RegDef_t *)GPIOB_BASE)
+#define GPIOC ((GPIO_RegDef_t *)GPIOC_BASE)
+#define GPIOD ((GPIO_RegDef_t *)GPIOD_BASE)
+#define GPIOE ((GPIO_RegDef_t *)GPIOE_BASE)
+#define GPIOF ((GPIO_RegDef_t *)GPIOF_BASE)
+#define GPIOG ((GPIO_RegDef_t *)GPIOG_BASE)
+#define GPIOH ((GPIO_RegDef_t *)GPIOH_BASE)
+#define GPIOI ((GPIO_RegDef_t *)GPIOI_BASE)
 
 #endif /* INC_STM32F407XX_H_ */
