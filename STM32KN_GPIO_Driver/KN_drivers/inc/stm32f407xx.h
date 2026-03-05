@@ -296,11 +296,12 @@ typedef struct
 }GPIO_RegDef_t; // __IO is basically volatile type qualifier!
 
 /*
-GPIOA_BASE is just a number (0x40020000).
-We cast it to (GPIO_RegDef_t *) so the compiler treats that address
-as a pointer to a GPIO register structure.
-This allows us to access registers using: GPIOA->MODER or GPIOA->ODR
-Instead of manually computing addresses like: *(uint32_t *)(GPIOA_BASE + offset{for MODER, ODR etc})
+VVI:
+    GPIOA_BASE is just a number (0x40020000).
+    We cast it to (GPIO_RegDef_t *) so the compiler treats that address
+    as a pointer to a GPIO register structure.
+    This allows us to access registers using: GPIOA->MODER or GPIOA->ODR
+    Instead of manually computing addresses like: *(uint32_t *)(GPIOA_BASE + offset{for MODER, ODR etc})
 */
 #define GPIOA ((GPIO_RegDef_t *)GPIOA_BASE)
 #define GPIOB ((GPIO_RegDef_t *)GPIOB_BASE)
@@ -355,29 +356,42 @@ typedef struct
 /* Peripheral Clock Enable & Disable MACRO deinations */
 /************************************************************************/
 /*
+VVI:
+    Do NOT write: RCC->AHB1ENR = (1U << x)
+    This overwrites the entire register and may disable other peripherals.
+
+    Use bit operations instead:
+    |=  → set only the required bit
+    &=~ → clear only the required bit
+
+    Example:
+    RCC->AHB1ENR |= (1U << 0);   // enable GPIOA clock without affecting other bits
+*/
+
+/*
 * GPIO Clk Enable
 */
-#define GPIOA_PCLK_EN()    (RCC->AHB1ENR |= (1 << 0))
-#define GPIOB_PCLK_EN()    (RCC->AHB1ENR |= (1 << 1))
-#define GPIOC_PCLK_EN()    (RCC->AHB1ENR |= (1 << 2))
-#define GPIOD_PCLK_EN()    (RCC->AHB1ENR |= (1 << 3))
-#define GPIOE_PCLK_EN()    (RCC->AHB1ENR |= (1 << 4))
-#define GPIOF_PCLK_EN()    (RCC->AHB1ENR |= (1 << 5))
-#define GPIOG_PCLK_EN()    (RCC->AHB1ENR |= (1 << 6))
-#define GPIOH_PCLK_EN()    (RCC->AHB1ENR |= (1 << 7))
-#define GPIOI_PCLK_EN()    (RCC->AHB1ENR |= (1 << 8))
+#define GPIOA_PCLK_EN()    (RCC->AHB1ENR |= (1U << 0))
+#define GPIOB_PCLK_EN()    (RCC->AHB1ENR |= (1U << 1))
+#define GPIOC_PCLK_EN()    (RCC->AHB1ENR |= (1U << 2))
+#define GPIOD_PCLK_EN()    (RCC->AHB1ENR |= (1U << 3))
+#define GPIOE_PCLK_EN()    (RCC->AHB1ENR |= (1U << 4))
+#define GPIOF_PCLK_EN()    (RCC->AHB1ENR |= (1U << 5))
+#define GPIOG_PCLK_EN()    (RCC->AHB1ENR |= (1U << 6))
+#define GPIOH_PCLK_EN()    (RCC->AHB1ENR |= (1U << 7))
+#define GPIOI_PCLK_EN()    (RCC->AHB1ENR |= (1U << 8))
 
 /*
 * GPIO Clk Disable
 */
-#define GPIOA_PCLK_DI()    (RCC->AHB1ENR &= ~(1 << 0))
-#define GPIOB_PCLK_DI()    (RCC->AHB1ENR &= ~(1 << 1))
-#define GPIOC_PCLK_DI()    (RCC->AHB1ENR &= ~(1 << 2))
-#define GPIOD_PCLK_DI()    (RCC->AHB1ENR &= ~(1 << 3))
-#define GPIOE_PCLK_DI()    (RCC->AHB1ENR &= ~(1 << 4))
-#define GPIOF_PCLK_DI()    (RCC->AHB1ENR &= ~(1 << 5))
-#define GPIOG_PCLK_DI()    (RCC->AHB1ENR &= ~(1 << 6))
-#define GPIOH_PCLK_DI()    (RCC->AHB1ENR &= ~(1 << 7))
-#define GPIOI_PCLK_DI()    (RCC->AHB1ENR &= ~(1 << 8))
+#define GPIOA_PCLK_DI()    (RCC->AHB1ENR &= ~(1U << 0))
+#define GPIOB_PCLK_DI()    (RCC->AHB1ENR &= ~(1U << 1))
+#define GPIOC_PCLK_DI()    (RCC->AHB1ENR &= ~(1U << 2))
+#define GPIOD_PCLK_DI()    (RCC->AHB1ENR &= ~(1U << 3))
+#define GPIOE_PCLK_DI()    (RCC->AHB1ENR &= ~(1U << 4))
+#define GPIOF_PCLK_DI()    (RCC->AHB1ENR &= ~(1U << 5))
+#define GPIOG_PCLK_DI()    (RCC->AHB1ENR &= ~(1U << 6))
+#define GPIOH_PCLK_DI()    (RCC->AHB1ENR &= ~(1U << 7))
+#define GPIOI_PCLK_DI()    (RCC->AHB1ENR &= ~(1U << 8))
 
 #endif /* INC_STM32F407XX_H_ */
