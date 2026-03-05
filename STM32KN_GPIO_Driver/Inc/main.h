@@ -22,7 +22,7 @@ extern "C" {
 #endif
 
 /* Includes ------------------------------------------------------------------*/
-#include <hal_stm32f407xx.h>
+#include "stm32f407xx.h"
 #include "core_cm4.h"
 #include "cmsis_version.h"
 #include "cmsis_gcc.h"
