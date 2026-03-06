@@ -299,3 +299,34 @@ uint8_t gpio_get_pin_level(GPIO_RegDef_t *pGPIOx_addr, uint8_t pin_number)
     uint8_t pin_state = (uint8_t)(pGPIOx_addr->IDR >> pin_number) & 1U; // >> shifting will give make the reg for that pin to @bit0, ANDing with 1U will only retai that one bit rest all 0!
     return pin_state;
 }
+
+/****************************************************
+ * @intro:
+ *      This function reads the logic levels present on
+ *      all pins of a GPIO port.
+ *
+ * @param[in]:
+ *      GPIO_RegDef_t *pGPIOx_addr
+ *      Pointer to the GPIO peripheral registers
+ *      (GPIOA, GPIOB, GPIOC, etc).
+ *
+ * @return:
+ *      uint16_t
+ *      Returns the current logic levels of all pins
+ *      of the port as a 16 bit value.
+ *
+ *      Bit mapping:
+ *          bit0  -> pin0
+ *          bit1  -> pin1
+ *          ...
+ *          bit15 -> pin15
+ *
+ * @Note:
+ *      The function reads the state of the entire
+ *      port from the IDR (Input Data Register) of
+ *      the GPIO peripheral.
+ */
+uint16_t gpio_get_port_level(GPIO_RegDef_t *pGPIOx_addr)
+{
+    return (uint16_t)(pGPIOx_addr->IDR);
+}
