@@ -33,15 +33,30 @@ typedef struct{
 /************************************************************************/
 /* Function prototypes for GPIO specific API's */
 /************************************************************************/
-void gpio_clk_ctrl(void);
-void gpio_init(void);
-void gpio_deinit(void);
-void gpio_get_pin_level(void);
-void gpio_set_pin_level(void);
-void gpio_get_port_level(void);
-void gpio_set_port_level(void);
-void gpio_toggle_pin(void);
-void gpio_irq_config(void);
-void gpio_irq_handle(void);
+/**
+ * API to control clock enabling & disabling for a GPIO peripheral{A-I} 
+ */
+void gpio_clk_ctrl(GPIO_RegDef_t *pGPIOx_addr, uint8_t state);
+
+/**
+ * API's to init/deinit a gpio pin as per settings!
+ */
+void gpio_init(GPIO_Handle_t *pGPIO_handle);
+void gpio_deinit(GPIO_RegDef_t *pGPIOx_addr);
+
+/**
+ * API's to read/write onto/from a gpio pin/port!
+ */
+uint8_t gpio_get_pin_level(GPIO_RegDef_t *pGPIOx_addr, uint8_t pin_number);
+void gpio_set_pin_level(GPIO_RegDef_t *pGPIOx_addr, uint8_t pin_number, uint8_t pin_state);
+uint16_t gpio_get_port_level(GPIO_RegDef_t *pGPIOx_addr);
+void gpio_set_port_level(GPIO_RegDef_t *pGPIOx_addr, uint8_t port_state);
+void gpio_toggle_pin(GPIO_RegDef_t *pGPIOx_addr, uint16_t pin_number);
+
+/**
+ * API's for Interrupt Handling
+ */
+void gpio_irq_config(IRQn_Type IRQ_number, uint8_t IRQ_priority, uint8_t state);
+void gpio_irq_handle(uint8_t pin_number);
 
 #endif /* INC_GPIO_DRIVER_H_ */
