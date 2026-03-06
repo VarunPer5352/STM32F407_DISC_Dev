@@ -267,3 +267,35 @@ void gpio_deinit(GPIO_RegDef_t *pGPIOx_addr)
         GPIOI_REG_RESET();
     }
 }
+
+/****************************************************
+ * @intro:
+ *      This function reads the logic level present on
+ *      a specific GPIO pin.
+ *
+ * @param[in]:
+ *      GPIO_RegDef_t *pGPIOx_addr
+ *      Pointer to the GPIO peripheral registers
+ *      (GPIOA, GPIOB, GPIOC, etc).
+ *
+ * @param[in]:
+ *      uint8_t pin_number
+ *      Specifies the GPIO pin number whose logic
+ *      level needs to be read.
+ *
+ * @return:
+ *      uint8_t
+ *      Returns the current logic level of the pin.
+ *          0 -> Logic LOW
+ *          1 -> Logic HIGH
+ *
+ * @Note:
+ *      The function reads the state of the pin from
+ *      the IDR (Input Data Register) of the GPIO
+ *      peripheral.
+ */
+uint8_t gpio_get_pin_level(GPIO_RegDef_t *pGPIOx_addr, uint8_t pin_number)
+{
+    uint8_t pin_state = (uint8_t)(pGPIOx_addr->IDR >> pin_number) & 1U; // >> shifting will give make the reg for that pin to @bit0, ANDing with 1U will only retai that one bit rest all 0!
+    return pin_state;
+}
