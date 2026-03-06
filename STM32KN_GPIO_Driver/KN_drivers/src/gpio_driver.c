@@ -406,3 +406,33 @@ void gpio_set_port_level(GPIO_RegDef_t *pGPIOx_addr, uint16_t port_state)
 {
     pGPIOx_addr->ODR = port_state;
 }
+
+/****************************************************
+ * @intro:
+ *      This function toggles the current logic level
+ *      of a specific GPIO pin.
+ *
+ * @param[in]:
+ *      GPIO_RegDef_t *pGPIOx_addr
+ *      Pointer to the GPIO peripheral registers
+ *      (GPIOA, GPIOB, GPIOC, etc).
+ *
+ * @param[in]:
+ *      uint8_t pin_number
+ *      Specifies the GPIO pin number whose logic
+ *      level needs to be toggled.
+ *
+ * @return:
+ *      None
+ *
+ * @Note:
+ *      The function modifies the ODR (Output Data
+ *      Register) of the GPIO peripheral. The XOR
+ *      operation flips the current state of the pin:
+ *          HIGH becomes LOW
+ *          LOW becomes HIGH
+ */
+void gpio_toggle_pin(GPIO_RegDef_t *pGPIOx_addr, uint8_t pin_number)
+{
+    pGPIOx_addr->ODR ^= (1U << pin_number);
+}
