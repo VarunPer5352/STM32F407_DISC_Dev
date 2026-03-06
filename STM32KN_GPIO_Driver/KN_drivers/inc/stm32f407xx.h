@@ -361,8 +361,8 @@ VVI:
     This overwrites the entire register and may disable other peripherals.
 
     Use bit operations instead:
-    |=  → set only the required bit
-    &=~ → clear only the required bit
+    |=  -> set only the required bit
+    &=~ -> clear only the required bit
 
     Example:
     RCC->AHB1ENR |= (1U << 0);   // enable GPIOA clock without affecting other bits
@@ -393,5 +393,19 @@ VVI:
 #define GPIOG_PCLK_DI()    (RCC->AHB1ENR &= ~(1U << 6))
 #define GPIOH_PCLK_DI()    (RCC->AHB1ENR &= ~(1U << 7))
 #define GPIOI_PCLK_DI()    (RCC->AHB1ENR &= ~(1U << 8))
+
+/**
+ * GPIO Peripheral Register complete DEINIT/RESET
+ * CAUTION: First set it then reset it if u dont reset then the periph will remain in reset forever unless again reset ok!
+ */
+#define GPIOA_REG_RESET()   do{ (RCC->AHB1RSTR |= (1U << 0)); (RCC->AHB1RSTR &= ~(1U << 0)); } while (0)
+#define GPIOB_REG_RESET()   do{ (RCC->AHB1RSTR |= (1U << 1)); (RCC->AHB1RSTR &= ~(1U << 1)); } while (0)
+#define GPIOC_REG_RESET()   do{ (RCC->AHB1RSTR |= (1U << 2)); (RCC->AHB1RSTR &= ~(1U << 2)); } while (0)
+#define GPIOD_REG_RESET()   do{ (RCC->AHB1RSTR |= (1U << 3)); (RCC->AHB1RSTR &= ~(1U << 3)); } while (0)
+#define GPIOE_REG_RESET()   do{ (RCC->AHB1RSTR |= (1U << 4)); (RCC->AHB1RSTR &= ~(1U << 4)); } while (0)
+#define GPIOF_REG_RESET()   do{ (RCC->AHB1RSTR |= (1U << 5)); (RCC->AHB1RSTR &= ~(1U << 5)); } while (0)
+#define GPIOG_REG_RESET()   do{ (RCC->AHB1RSTR |= (1U << 6)); (RCC->AHB1RSTR &= ~(1U << 6)); } while (0)
+#define GPIOH_REG_RESET()   do{ (RCC->AHB1RSTR |= (1U << 7)); (RCC->AHB1RSTR &= ~(1U << 7)); } while (0)
+#define GPIOI_REG_RESET()   do{ (RCC->AHB1RSTR |= (1U << 8)); (RCC->AHB1RSTR &= ~(1U << 8)); } while (0)
 
 #endif /* INC_STM32F407XX_H_ */

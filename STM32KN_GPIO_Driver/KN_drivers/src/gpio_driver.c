@@ -62,7 +62,7 @@ void gpio_clk_ctrl(GPIO_RegDef_t *pGPIOx_addr, uint8_t state)
         else if (pGPIOx_addr == GPIOI)
         {
             GPIOI_PCLK_EN();
-        }        
+        }
     }
     else
     {
@@ -199,5 +199,71 @@ void gpio_init(GPIO_Handle_t *pGPIO_handle)
 
         // Then writing the desired AFR setting.
         pGPIO_handle->pGPIOx_addr->AFR[pGPIO_handle->pin_config.Pin / 8] |= (pGPIO_handle->pin_config.Alternate << (4 * (pGPIO_handle->pin_config.Pin % 8)));
+    }
+}
+
+/****************************************************
+ * @intro:
+ *      This function resets a GPIO peripheral to its
+ *      default reset state.
+ *
+ * @param[in]:
+ *      GPIO_RegDef_t *pGPIOx_addr
+ *      Pointer to the GPIO peripheral whose registers
+ *      need to be reset.
+ *
+ *      The function uses the RCC peripheral reset
+ *      registers to reset the entire GPIO port.
+ *
+ * @return:
+ *      None
+ *
+ * @Note:
+ *      This reset affects the entire GPIO peripheral
+ *      (GPIOA, GPIOB, etc) and not individual pins.
+ *      This is useful when:
+ *          shutting down a driver
+ *          releasing a peripheral
+ *          reinitializing hardware
+ *          debugging
+ *     It is not used during normal pin configuration.
+ */
+void gpio_deinit(GPIO_RegDef_t *pGPIOx_addr)
+{
+    if (pGPIOx_addr == GPIOA)
+    {
+        GPIOA_REG_RESET();
+    }
+    else if (pGPIOx_addr == GPIOB)
+    {
+        GPIOB_REG_RESET();
+    }
+    else if (pGPIOx_addr == GPIOC)
+    {
+        GPIOC_REG_RESET();
+    }
+    else if (pGPIOx_addr == GPIOD)
+    {
+        GPIOD_REG_RESET();
+    }
+    else if (pGPIOx_addr == GPIOE)
+    {
+        GPIOE_REG_RESET();
+    }
+    else if (pGPIOx_addr == GPIOF)
+    {
+        GPIOF_REG_RESET();
+    }
+    else if (pGPIOx_addr == GPIOG)
+    {
+        GPIOG_REG_RESET();
+    }
+    else if (pGPIOx_addr == GPIOH)
+    {
+        GPIOH_REG_RESET();
+    }
+    else if (pGPIOx_addr == GPIOI)
+    {
+        GPIOI_REG_RESET();
     }
 }
