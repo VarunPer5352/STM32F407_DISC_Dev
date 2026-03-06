@@ -330,3 +330,45 @@ uint16_t gpio_get_port_level(GPIO_RegDef_t *pGPIOx_addr)
 {
     return (uint16_t)(pGPIOx_addr->IDR);
 }
+
+/****************************************************
+ * @intro:
+ *      This function sets the logic level of a
+ *      specific GPIO pin.
+ *
+ * @param[in]:
+ *      GPIO_RegDef_t *pGPIOx_addr
+ *      Pointer to the GPIO peripheral registers
+ *      (GPIOA, GPIOB, GPIOC, etc).
+ *
+ * @param[in]:
+ *      uint8_t pin_number
+ *      Specifies the GPIO pin number whose logic
+ *      level needs to be modified.
+ *
+ * @param[in]:
+ *      uint8_t pin_state
+ *      Specifies the logic state to be written to
+ *      the pin.
+ *          0 -> Logic LOW
+ *          1 -> Logic HIGH
+ *
+ * @return:
+ *      None
+ *
+ * @Note:
+ *      The function writes the pin state to the
+ *      ODR (Output Data Register) of the GPIO
+ *      peripheral.
+ */
+void gpio_set_pin_level(GPIO_RegDef_t *pGPIOx_addr, uint8_t pin_number, uint8_t pin_state)
+{
+    if (pin_state == 1)
+    {
+        pGPIOx_addr->ODR |= (1U << pin_number);
+    }
+    else if (pin_state == 0)
+    {
+        pGPIOx_addr->ODR &= ~(1U << pin_number);
+    }
+}
