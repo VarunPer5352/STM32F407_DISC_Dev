@@ -30,4 +30,18 @@ typedef struct{
     GPIO_Config_t pin_config; // This has all the settings attributed to that GPIO, this is used to store settings to be written into Reg's
 }GPIO_Handle_t;
 
+/************************************************************************/
+/* Function prototypes for GPIO specific API's */
+/************************************************************************/
+void gpio_clk_ctrl(void);
+void gpio_init(void);
+void gpio_deinit(void);
+void gpio_get_pin_level(void);
+void gpio_set_pin_level(void);
+void gpio_get_port_level(void);
+void gpio_set_port_level(void);
+void gpio_toggle_pin(void);
+void gpio_irq_config(void);
+void gpio_irq_handle(void);
+
 #endif /* INC_GPIO_DRIVER_H_ */
