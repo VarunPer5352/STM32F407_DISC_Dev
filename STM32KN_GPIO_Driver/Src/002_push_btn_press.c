@@ -120,7 +120,7 @@ void GPIO_Init(GPIO_Handle_t *pGPIOxHandle)
     pGPIOxHandle->pGPIOx_addr = GPIOA;
     pGPIOxHandle->pin_config.Mode = GPIO_MODE_INPUT;
     pGPIOxHandle->pin_config.Pin = GPIO_PIN_0;
-    pGPIOxHandle->pin_config.Pull = GPIO_PULLDOWN;
+    pGPIOxHandle->pin_config.Pull = GPIO_NOPULL;
     gpio_init(pGPIOxHandle);
 }
 
