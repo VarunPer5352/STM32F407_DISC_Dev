@@ -36,19 +36,19 @@ int main(void)
 	  while (1)
 	  {
 		  gpio_set_pin_level(GPIOD, GPIO_PIN_12, 1);
-		  for (volatile uint32_t i = 0; i < 100000; i++);
+		  delay_blk(25);
 		  gpio_set_pin_level(GPIOD, GPIO_PIN_12, 0);
 		  
 		  gpio_set_pin_level(GPIOD, GPIO_PIN_13, 1);
-		  for (volatile uint32_t i = 0; i < 100000; i++);
+		  delay_blk(25);
 		  gpio_set_pin_level(GPIOD, GPIO_PIN_13, 0);
 		  
 		  gpio_set_pin_level(GPIOD, GPIO_PIN_14, 1);
-		  for (volatile uint32_t i = 0; i < 100000; i++);
+		  delay_blk(25);
 		  gpio_set_pin_level(GPIOD, GPIO_PIN_14, 0);
 		  
 		  gpio_set_pin_level(GPIOD, GPIO_PIN_15, 1);
-		  for (volatile uint32_t i = 0; i < 100000; i++);
+		  delay_blk(25);
 		  gpio_set_pin_level(GPIOD, GPIO_PIN_15, 0);
 	  }
 }
@@ -91,4 +91,26 @@ void GPIO_Init(GPIO_Handle_t *pGPIOxHandle)
     /* configure PD15 */
     pGPIOxHandle->pin_config.Pin = GPIO_PIN_15;
     gpio_init(pGPIOxHandle);
+}
+
+/*
+ * Simple blocking delay.
+ * Assumes system clock = 16 MHz (HSI default after reset).
+ *
+ * One loop iteration roughly takes ~4 CPU cycles.
+ * 16 MHz / 4 = ~4,000,000 iterations per second.
+ *
+ * Therefore:
+ * 4000 iterations ≈ 1 ms delay.
+ */
+
+void delay_blk(uint32_t ms)
+{
+  for (uint32_t time_ms = 0; time_ms < ms; time_ms++)
+  {
+    for(volatile uint32_t j = 0; j < 4000; j++)
+    {
+        __asm__("nop");
+    }
+  }
 }

@@ -37,6 +37,7 @@ extern "C" {
 // Function Prototype's
 void Error_Handler(void);
 void GPIO_Init(GPIO_Handle_t *pGPIOxHandle);
+void delay_blk(uint32_t ms);
 
 #ifdef __cplusplus
 }
