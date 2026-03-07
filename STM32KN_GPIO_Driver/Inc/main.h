@@ -29,12 +29,14 @@ extern "C" {
 #include "cmsis_compiler.h"
 #include "mpu_armv7.h"
 
+#include "gpio_driver.h"
+
 /* User Driver Includes */
 
 
 // Function Prototype's
 void Error_Handler(void);
-
+void GPIO_Init(GPIO_Handle_t *pGPIOxHandle);
 
 #ifdef __cplusplus
 }

@@ -23,13 +23,33 @@
   #warning "FPU is not initialized, but the project is compiling for an FPU. Please initialize the FPU before use."
 #endif
 
+GPIO_Handle_t led;
+
 int main(void)
 {
+    GPIO_Init(&led);
+
+    /* Clear all LEDs */
+    gpio_set_port_level(GPIOD, 0);
+
     /* Loop forever */
 	  while (1)
 	  {
-        
-        
+		  gpio_set_pin_level(GPIOD, GPIO_PIN_12, 1);
+		  for (volatile uint32_t i = 0; i < 100000; i++);
+		  gpio_set_pin_level(GPIOD, GPIO_PIN_12, 0);
+		  
+		  gpio_set_pin_level(GPIOD, GPIO_PIN_13, 1);
+		  for (volatile uint32_t i = 0; i < 100000; i++);
+		  gpio_set_pin_level(GPIOD, GPIO_PIN_13, 0);
+		  
+		  gpio_set_pin_level(GPIOD, GPIO_PIN_14, 1);
+		  for (volatile uint32_t i = 0; i < 100000; i++);
+		  gpio_set_pin_level(GPIOD, GPIO_PIN_14, 0);
+		  
+		  gpio_set_pin_level(GPIOD, GPIO_PIN_15, 1);
+		  for (volatile uint32_t i = 0; i < 100000; i++);
+		  gpio_set_pin_level(GPIOD, GPIO_PIN_15, 0);
 	  }
 }
 
@@ -46,4 +66,29 @@ void Error_Handler(void)
   {
   }
   /* USER CODE END Error_Handler_Debug */
-} 
+}
+
+void GPIO_Init(GPIO_Handle_t *pGPIOxHandle)
+{
+    pGPIOxHandle->pGPIOx_addr = GPIOD;
+    pGPIOxHandle->pin_config.Mode = GPIO_MODE_OUTPUT;
+    pGPIOxHandle->pin_config.OPType = GPIO_OP_PP;
+    pGPIOxHandle->pin_config.Pull = GPIO_NOPULL;
+    pGPIOxHandle->pin_config.Speed = GPIO_SPEED_FREQ_LOW;
+
+    /* configure PD12 */
+    pGPIOxHandle->pin_config.Pin = GPIO_PIN_12;
+    gpio_init(pGPIOxHandle);
+
+    /* configure PD13 */
+    pGPIOxHandle->pin_config.Pin = GPIO_PIN_13;
+    gpio_init(pGPIOxHandle);
+
+    /* configure PD14 */
+    pGPIOxHandle->pin_config.Pin = GPIO_PIN_14;
+    gpio_init(pGPIOxHandle);
+
+    /* configure PD15 */
+    pGPIOxHandle->pin_config.Pin = GPIO_PIN_15;
+    gpio_init(pGPIOxHandle);
+}
