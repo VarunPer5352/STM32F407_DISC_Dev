@@ -394,6 +394,8 @@ VVI:
 #define GPIOH_PCLK_DI()    (RCC->AHB1ENR &= ~(1U << 7))
 #define GPIOI_PCLK_DI()    (RCC->AHB1ENR &= ~(1U << 8))
 
+#define GPIO_PORT_CODE(pGPIOx)    ((pGPIOx == GPIOA) ? 0 : (pGPIOx == GPIOB) ? 1 : (pGPIOx == GPIOC) ? 2 : (pGPIOx == GPIOD) ? 3 : (pGPIOx == GPIOE) ? 4 : (pGPIOx == GPIOF) ? 5 : (pGPIOx == GPIOG) ? 6 : (pGPIOx == GPIOH) ? 7 : (pGPIOx == GPIOI) ? 8 : 0)
+
 /**
  * GPIO Peripheral Register complete DEINIT/RESET
  * CAUTION: First set it then reset it if u dont reset then the periph will remain in reset forever unless again reset ok!
@@ -407,5 +409,40 @@ VVI:
 #define GPIOG_REG_RESET()   do{ (RCC->AHB1RSTR |= (1U << 6)); (RCC->AHB1RSTR &= ~(1U << 6)); } while (0)
 #define GPIOH_REG_RESET()   do{ (RCC->AHB1RSTR |= (1U << 7)); (RCC->AHB1RSTR &= ~(1U << 7)); } while (0)
 #define GPIOI_REG_RESET()   do{ (RCC->AHB1RSTR |= (1U << 8)); (RCC->AHB1RSTR &= ~(1U << 8)); } while (0)
+
+/**
+  * @brief External Interrupt/Event Controller periph struct
+  */
+typedef struct
+{
+  __IO uint32_t IMR;    /*!< EXTI Interrupt mask register,            Address offset: 0x00 */
+  __IO uint32_t EMR;    /*!< EXTI Event mask register,                Address offset: 0x04 */
+  __IO uint32_t RTSR;   /*!< EXTI Rising trigger selection register,  Address offset: 0x08 */
+  __IO uint32_t FTSR;   /*!< EXTI Falling trigger selection register, Address offset: 0x0C */
+  __IO uint32_t SWIER;  /*!< EXTI Software interrupt event register,  Address offset: 0x10 */
+  __IO uint32_t PR;     /*!< EXTI Pending register,                   Address offset: 0x14 */
+} EXTI_RegDef_t;
+
+#define EXTI ((EXTI_RegDef_t *)EXTI_BASE)
+
+/**
+  * @brief System configuration controller Reg periph struct
+  */
+typedef struct
+{
+  __IO uint32_t MEMRMP;       /*!< SYSCFG memory remap register,                      Address offset: 0x00      */
+  __IO uint32_t PMC;          /*!< SYSCFG peripheral mode configuration register,     Address offset: 0x04      */
+  __IO uint32_t EXTICR[4];    /*!< SYSCFG external interrupt configuration registers, Address offset: 0x08-0x14 */
+  uint32_t      RESERVED[2];  /*!< Reserved, 0x18-0x1C                                                          */
+  __IO uint32_t CMPCR;        /*!< SYSCFG Compensation cell control register,         Address offset: 0x20      */
+} SYSCFG_RegDef_t;
+
+#define SYSCFG ((SYSCFG_RegDef_t *)SYSCFG_BASE)
+
+/*
+* SYSCFG Clk Enable & Disable
+*/
+#define SYSCFG_PCLK_EN()    (RCC->APB2ENR |= (1U << 14))
+#define SYSCFG_PCLK_DI()    (RCC->APB2ENR &= ~(1U << 14))
 
 #endif /* INC_STM32F407XX_H_ */

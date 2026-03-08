@@ -147,7 +147,42 @@ void gpio_init(GPIO_Handle_t *pGPIO_handle)
     else
     {
         // Interrupt mode programming!
+        /*
+            | Register field type                            | Operation        | Reason              |
+            | ---------------------------------------------- | ---------------- | ------------------- |
+            | Multi-bit value (MODER, AFR, OSPEEDR, PUPDR)   | clear then write | avoid leftover bits |
+            | Single-bit enable (EXTI trigger, clock enable) | OR to set        | safe                |
+            | Single-bit disable                             | AND with inverse | force 0             |
+        */
+        uint8_t pin = pGPIO_handle->pin_config.Pin;
+
+        if(pGPIO_handle->pin_config.Mode == GPIO_MODE_IT_FALLING)
+        {
+            EXTI->FTSR |= (1U << pin);
+            EXTI->RTSR &= ~(1U << pin);
+        }
+        else if(pGPIO_handle->pin_config.Mode == GPIO_MODE_IT_RISING)
+        {
+            EXTI->RTSR |= (1U << pin);
+            EXTI->FTSR &= ~(1U << pin);
+        }
+        else if(pGPIO_handle->pin_config.Mode == GPIO_MODE_IT_RISING_FALLING)
+        {
+            EXTI->RTSR |= (1U << pin);
+            EXTI->FTSR |= (1U << pin);
+        }
         
+        // Enable SYSCONFIG Periph clk enable!
+        SYSCFG_PCLK_EN();
+
+        // Retrieving port code based on GPIO Periph
+        uint8_t port_code = GPIO_PORT_CODE(pGPIO_handle->pGPIOx_addr);
+
+        // Configure GPIO Port Selection in SYSCFG_EXTICR
+        SYSCFG->EXTICR[pin/4] |= port_code << ((pin % 4) * 4);
+        
+        // Enable EXTI interrupt delivery via Interrupt Mask Register{IMR}
+        EXTI->IMR |= (1U << pin);
     }
 
     // 2. Configure the speed of a GPIO pin.
