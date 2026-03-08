@@ -120,7 +120,7 @@ typedef enum
 } IRQn_Type;
 /* Legacy define */
 #define  HASH_RNG_IRQn      RNG_IRQn
-
+#define IRQ_PRIORITY_SKIP   0xFF
 #include "core_cm4.h"
 
 /*

@@ -471,3 +471,55 @@ void gpio_toggle_pin(GPIO_RegDef_t *pGPIOx_addr, uint8_t pin_number)
 {
     pGPIOx_addr->ODR ^= (1U << pin_number);
 }
+
+/****************************************************
+ * @intro:
+ *      This function enables or disables an interrupt
+ *      in the NVIC (Nested Vector Interrupt Controller).
+ *
+ * @param[in]:
+ *      IRQn_Type IRQ_number
+ *      Interrupt number corresponding to the peripheral
+ *      interrupt source.
+ *
+ * @param[in]:
+ *      uint8_t IRQ_priority
+ *      Priority level to be assigned to the interrupt.
+ *      (Priority configuration may be implemented later.)
+ *
+ * @param[in]:
+ *      uint8_t state
+ *      ENABLE  -> enable interrupt in NVIC
+ *      DISABLE -> disable interrupt in NVIC
+ *
+ * @return:
+ *      None
+ *
+ * @Note:
+ *      NVIC uses multiple ISER and ICER registers where
+ *      each register controls 32 interrupt lines.
+ *
+ *      IRQ_number / 32 selects which NVIC register.
+ *      IRQ_number % 32 selects the bit inside that register.
+ *      IRQ_Priority -> of 0xFF or 255 means u dont want to set a particular priority!
+ */
+void gpio_irq_config(IRQn_Type IRQ_number, uint8_t IRQ_priority, uint8_t state)
+{
+    // Based on state to enable or diable an interrupt
+    if(state == ENABLE)
+    {
+        NVIC->ISER[IRQ_number / 32] |= (1U << (IRQ_number % 32));
+    }
+    else
+    {
+        NVIC->ICER[IRQ_number / 32] |= (1U << (IRQ_number % 32));
+    }
+
+    if (IRQ_priority != IRQ_PRIORITY_SKIP)
+    {
+        // Even though lower bits are ignored, it’s safer to mask:
+        NVIC->IP[IRQ_number] &= ~(0xF << 4);
+        // Setting Priority: On Cortex-M4 (STM32F407)->priority field = only upper 4 bits used, i.e. priority bits = [7:4] lower bits ignored
+        NVIC->IP[IRQ_number] = (IRQ_priority << 4);
+    }
+}
