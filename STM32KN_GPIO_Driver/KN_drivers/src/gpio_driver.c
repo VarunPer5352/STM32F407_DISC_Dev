@@ -523,3 +523,41 @@ void gpio_irq_config(IRQn_Type IRQ_number, uint8_t IRQ_priority, uint8_t state)
         NVIC->IP[IRQ_number] = (IRQ_priority << 4);
     }
 }
+
+/****************************************************
+ * @intro:
+ *      This function handles a GPIO interrupt by
+ *      clearing the pending interrupt flag in the
+ *      EXTI controller.
+ *
+ * @param[in]:
+ *      uint8_t pin_number
+ *      Specifies the GPIO pin number associated with
+ *      the EXTI line that generated the interrupt.
+ *
+ * @return:
+ *      None
+ *
+ * @Note:
+ *      The EXTI controller sets a pending flag in the
+ *      PR (Pending Register) whenever an interrupt
+ *      event occurs on a configured EXTI line.
+ *
+ *      Before exiting the interrupt service routine,
+ *      this pending flag must be cleared, otherwise
+ *      the interrupt will immediately trigger again.
+ *
+ *      The EXTI pending flag is cleared by writing
+ *      a '1' to the corresponding bit in the PR
+ *      register.
+ *
+ *      Example:
+ *          EXTI->PR |= (1U << pin_number);
+ */
+void gpio_irq_handle(uint8_t pin_number)
+{
+    if(EXTI->PR & (1U << pin_number))
+    {
+        EXTI->PR |= (1U << pin_number);   /* clear pending bit */
+    }
+}
