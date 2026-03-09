@@ -65,14 +65,17 @@ int main(void)
       {
     	  if(btn_flag)
     	  {
-    		  delay_blk(20); // debounce delay
-    		  if(gpio_get_pin_level(GPIOA, GPIO_PIN_0))
-    	      {
-    			  /* toggle LED */
-    			  gpio_toggle_pin(GPIOD, GPIO_PIN_12);
-    	      }
+    	      btn_flag = 0;
 
-    		  btn_flag = 0; // Clear flag
+    	      if(gpio_get_pin_level(GPIOA, GPIO_PIN_0))
+    	      {
+    	          gpio_set_pin_level(GPIOD, GPIO_PIN_12, ENABLE);
+    	      }
+    	      else
+    	      {
+    	          gpio_set_pin_level(GPIOD, GPIO_PIN_12, DISABLE);
+    	      }
+    	      delay_blk(30);   // debounce
     	  }
       }
 }
@@ -106,7 +109,7 @@ void GPIO_Init(GPIO_Handle_t *pGPIOxHandle)
 
     /* configure PA0 as interrupt pin */
     pGPIOxHandle->pGPIOx_addr = GPIOA;
-    pGPIOxHandle->pin_config.Mode = GPIO_MODE_IT_RISING;
+    pGPIOxHandle->pin_config.Mode = GPIO_MODE_IT_RISING_FALLING;
     pGPIOxHandle->pin_config.Pin = GPIO_PIN_0;
     pGPIOxHandle->pin_config.Pull = GPIO_NOPULL;
     gpio_init(pGPIOxHandle);
