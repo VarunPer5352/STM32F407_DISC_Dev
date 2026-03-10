@@ -1,0 +1,563 @@
+/*
+ * gpio_driver.c
+ *
+ *  Created on: Mar 6, 2026
+ *      Author: varun.s.patil
+ */
+
+#include "gpio_driver.h"
+
+/****************************************************
+ * @intro:
+            This func enables or diables the clock to a gpio peripheral
+            from A-I.
+
+ * @param1[in]:
+                GPIO_RegDef_t *pGPIOx_addr -> this is the pointer to the gpio peripheral.
+
+ * @param1[in]:
+                uint8_t state -> this is the state of the clock ctrl i.e. 0 means disable & 1 means enable.
+
+ * @return: 
+            Nothing.
+ * @Note:
+        Uses the RCC clock control MARCOs for GPIO clock control.
+ */
+void gpio_clk_ctrl(GPIO_RegDef_t *pGPIOx_addr, uint8_t state)
+{
+    if (state == ENABLE)
+    {
+        if (pGPIOx_addr == GPIOA)
+        {
+            GPIOA_PCLK_EN();
+        }
+        else if (pGPIOx_addr == GPIOB)
+        {
+            GPIOB_PCLK_EN();
+        }
+        else if (pGPIOx_addr == GPIOC)
+        {
+            GPIOC_PCLK_EN();
+        }
+        else if (pGPIOx_addr == GPIOD)
+        {
+            GPIOD_PCLK_EN();
+        }
+        else if (pGPIOx_addr == GPIOE)
+        {
+            GPIOE_PCLK_EN();
+        }
+        else if (pGPIOx_addr == GPIOF)
+        {
+            GPIOF_PCLK_EN();
+        }
+        else if (pGPIOx_addr == GPIOG)
+        {
+            GPIOG_PCLK_EN();
+        }
+        else if (pGPIOx_addr == GPIOH)
+        {
+            GPIOH_PCLK_EN();
+        }
+        else if (pGPIOx_addr == GPIOI)
+        {
+            GPIOI_PCLK_EN();
+        }
+    }
+    else
+    {
+        if (pGPIOx_addr == GPIOA)
+        {
+            GPIOA_PCLK_DI();
+        }
+        else if (pGPIOx_addr == GPIOB)
+        {
+            GPIOB_PCLK_DI();
+        }
+        else if (pGPIOx_addr == GPIOC)
+        {
+            GPIOC_PCLK_DI();
+        }
+        else if (pGPIOx_addr == GPIOD)
+        {
+            GPIOD_PCLK_DI();
+        }
+        else if (pGPIOx_addr == GPIOE)
+        {
+            GPIOE_PCLK_DI();
+        }
+        else if (pGPIOx_addr == GPIOF)
+        {
+            GPIOF_PCLK_DI();
+        }
+        else if (pGPIOx_addr == GPIOG)
+        {
+            GPIOG_PCLK_DI();
+        }
+        else if (pGPIOx_addr == GPIOH)
+        {
+            GPIOH_PCLK_DI();
+        }
+        else if (pGPIOx_addr == GPIOI)
+        {
+            GPIOI_PCLK_DI();
+        }        
+    }
+}
+
+/****************************************************
+ * @intro:
+ *      This function initializes a GPIO pin based on
+ *      the configuration provided in the GPIO handle
+ *      structure.
+ *
+ * @param[in]:
+ *      GPIO_Handle_t *pGPIO_handle
+ *      Pointer to a GPIO handle structure which contains:
+ *          1. Pointer to the GPIO peripheral registers
+ *             (GPIO_RegDef_t *pGPIOx_addr)
+ *          2. Pin configuration parameters
+ *             (GPIO_Config_t pin_config)
+ *
+ *      The configuration values stored in PinConfig are
+ *      used to configure the corresponding GPIO registers
+ *      such as MODER, OTYPER, OSPEEDR, PUPDR, etc.
+ *
+ * @return:
+ *      None
+ *
+ * @Note:
+ *      The GPIO peripheral clock must be enabled before
+ *      configuring the registers.
+ */
+void gpio_init(GPIO_Handle_t *pGPIO_handle)
+{
+    /* Enable peripheral clock */
+    gpio_clk_ctrl(pGPIO_handle->pGPIOx_addr, ENABLE);
+
+    // 1. Configure the mode of a GPIO pin.
+    if (pGPIO_handle->pin_config.Mode <= GPIO_MODE_ANALOG) // GPIO_MODE_ANALOG -> 3U this is non-interrupt modes
+    {
+        /* clear the 2 bits corresponding to the pin in MODER reg */
+        pGPIO_handle->pGPIOx_addr->MODER &= ~(3U << (2 * pGPIO_handle->pin_config.Pin)); // 3U is 11b thus ANDing it will clear those bits.
+        
+        /* Then write the desired mode of the pin u want to set in MODER reg */
+        pGPIO_handle->pGPIOx_addr->MODER |= pGPIO_handle->pin_config.Mode << (2 * pGPIO_handle->pin_config.Pin);
+    }
+    else
+    {
+        // Interrupt mode programming!
+        /*
+            | Register field type                            | Operation        | Reason              |
+            | ---------------------------------------------- | ---------------- | ------------------- |
+            | Multi-bit value (MODER, AFR, OSPEEDR, PUPDR)   | clear then write | avoid leftover bits |
+            | Single-bit enable (EXTI trigger, clock enable) | OR to set        | safe                |
+            | Single-bit disable                             | AND with inverse | force 0             |
+        */
+        uint8_t pin = pGPIO_handle->pin_config.Pin;
+
+        if(pGPIO_handle->pin_config.Mode == GPIO_MODE_IT_FALLING)
+        {
+            EXTI->FTSR |= (1U << pin);
+            EXTI->RTSR &= ~(1U << pin);
+        }
+        else if(pGPIO_handle->pin_config.Mode == GPIO_MODE_IT_RISING)
+        {
+            EXTI->RTSR |= (1U << pin);
+            EXTI->FTSR &= ~(1U << pin);
+        }
+        else if(pGPIO_handle->pin_config.Mode == GPIO_MODE_IT_RISING_FALLING)
+        {
+            EXTI->RTSR |= (1U << pin);
+            EXTI->FTSR |= (1U << pin);
+        }
+        
+        // Enable SYSCONFIG Periph clk enable!
+        SYSCFG_PCLK_EN();
+
+        // Retrieving port code based on GPIO Periph
+        uint8_t port_code = GPIO_PORT_CODE(pGPIO_handle->pGPIOx_addr);
+
+        // Configure GPIO Port Selection in SYSCFG_EXTICR
+        SYSCFG->EXTICR[pin/4] |= port_code << ((pin % 4) * 4);
+        
+        // Enable EXTI interrupt delivery via Interrupt Mask Register{IMR}
+        EXTI->IMR |= (1U << pin);
+    }
+
+    // 2. Configure the speed of a GPIO pin.
+    pGPIO_handle->pGPIOx_addr->OSPEEDR &= ~(3U << (2 * pGPIO_handle->pin_config.Pin));
+    pGPIO_handle->pGPIOx_addr->OSPEEDR |= pGPIO_handle->pin_config.Speed << (2 * pGPIO_handle->pin_config.Pin);
+
+    // 3. Configure the internal resistor type of a GPIO pin.
+    pGPIO_handle->pGPIOx_addr->PUPDR &= ~(3U << (2 * pGPIO_handle->pin_config.Pin));
+    pGPIO_handle->pGPIOx_addr->PUPDR |= pGPIO_handle->pin_config.Pull << (2 * pGPIO_handle->pin_config.Pin);
+
+    // 4. Configure the Output type of a GPIO pin.
+    pGPIO_handle->pGPIOx_addr->OTYPER &= ~(1U << (1 * pGPIO_handle->pin_config.Pin));
+    pGPIO_handle->pGPIOx_addr->OTYPER |= pGPIO_handle->pin_config.OPType << (1 * pGPIO_handle->pin_config.Pin);   
+
+    // 5. Aletrnate functionality mode for a GPIO pin.
+    if (pGPIO_handle->pin_config.Mode == GPIO_MODE_ALTFN)
+    {
+        /*
+            Each GPIO pin configured for alternate function uses 4 bits in the AFR registers.
+
+            There are two AFR registers:
+            AFR[0] -> controls pins 0 to 7
+            AFR[1] -> controls pins 8 to 15
+
+            To select the correct AFR register:
+            Pin / 8
+            Pins 0-7  -> AFR[0]
+            Pins 8-15 -> AFR[1]
+
+            Inside each AFR register, every pin occupies 4 bits:
+            Pin0 -> bits 3:0
+            Pin1 -> bits 7:4
+            Pin2 -> bits 11:8
+            ...
+            Pin7 -> bits 31:28
+
+            To find the position of the 4-bit field within the AFR register:
+            (Pin % 8) gives the pin position inside the AFR register (0 to 7)
+
+            Multiplying by 4 gives the bit shift needed because each pin uses 4 bits:
+            shift = 4 * (Pin % 8)
+
+            Then:
+            1. Clear the 4-bit field using mask ~(15U << shift)
+            2. Write the new alternate function value into those bits
+        */
+        // Clearing 4 bit locations of AFR
+        pGPIO_handle->pGPIOx_addr->AFR[pGPIO_handle->pin_config.Pin / 8] &= ~(15U << (4 * (pGPIO_handle->pin_config.Pin % 8)));
+
+        // Then writing the desired AFR setting.
+        pGPIO_handle->pGPIOx_addr->AFR[pGPIO_handle->pin_config.Pin / 8] |= (pGPIO_handle->pin_config.Alternate << (4 * (pGPIO_handle->pin_config.Pin % 8)));
+    }
+}
+
+/****************************************************
+ * @intro:
+ *      This function resets a GPIO peripheral to its
+ *      default reset state.
+ *
+ * @param[in]:
+ *      GPIO_RegDef_t *pGPIOx_addr
+ *      Pointer to the GPIO peripheral whose registers
+ *      need to be reset.
+ *
+ *      The function uses the RCC peripheral reset
+ *      registers to reset the entire GPIO port.
+ *
+ * @return:
+ *      None
+ *
+ * @Note:
+ *      This reset affects the entire GPIO peripheral
+ *      (GPIOA, GPIOB, etc) and not individual pins.
+ *      This is useful when:
+ *          shutting down a driver
+ *          releasing a peripheral
+ *          reinitializing hardware
+ *          debugging
+ *     It is not used during normal pin configuration.
+ */
+void gpio_deinit(GPIO_RegDef_t *pGPIOx_addr)
+{
+    if (pGPIOx_addr == GPIOA)
+    {
+        GPIOA_REG_RESET();
+    }
+    else if (pGPIOx_addr == GPIOB)
+    {
+        GPIOB_REG_RESET();
+    }
+    else if (pGPIOx_addr == GPIOC)
+    {
+        GPIOC_REG_RESET();
+    }
+    else if (pGPIOx_addr == GPIOD)
+    {
+        GPIOD_REG_RESET();
+    }
+    else if (pGPIOx_addr == GPIOE)
+    {
+        GPIOE_REG_RESET();
+    }
+    else if (pGPIOx_addr == GPIOF)
+    {
+        GPIOF_REG_RESET();
+    }
+    else if (pGPIOx_addr == GPIOG)
+    {
+        GPIOG_REG_RESET();
+    }
+    else if (pGPIOx_addr == GPIOH)
+    {
+        GPIOH_REG_RESET();
+    }
+    else if (pGPIOx_addr == GPIOI)
+    {
+        GPIOI_REG_RESET();
+    }
+}
+
+/****************************************************
+ * @intro:
+ *      This function reads the logic level present on
+ *      a specific GPIO pin.
+ *
+ * @param[in]:
+ *      GPIO_RegDef_t *pGPIOx_addr
+ *      Pointer to the GPIO peripheral registers
+ *      (GPIOA, GPIOB, GPIOC, etc).
+ *
+ * @param[in]:
+ *      uint8_t pin_number
+ *      Specifies the GPIO pin number whose logic
+ *      level needs to be read.
+ *
+ * @return:
+ *      uint8_t
+ *      Returns the current logic level of the pin.
+ *          0 -> Logic LOW
+ *          1 -> Logic HIGH
+ *
+ * @Note:
+ *      The function reads the state of the pin from
+ *      the IDR (Input Data Register) of the GPIO
+ *      peripheral.
+ */
+uint8_t gpio_get_pin_level(GPIO_RegDef_t *pGPIOx_addr, uint8_t pin_number)
+{
+    uint8_t pin_state = (uint8_t)(pGPIOx_addr->IDR >> pin_number) & 1U; // >> shifting will give make the reg for that pin to @bit0, ANDing with 1U will only retai that one bit rest all 0!
+    return pin_state;
+}
+
+/****************************************************
+ * @intro:
+ *      This function reads the logic levels present on
+ *      all pins of a GPIO port.
+ *
+ * @param[in]:
+ *      GPIO_RegDef_t *pGPIOx_addr
+ *      Pointer to the GPIO peripheral registers
+ *      (GPIOA, GPIOB, GPIOC, etc).
+ *
+ * @return:
+ *      uint16_t
+ *      Returns the current logic levels of all pins
+ *      of the port as a 16 bit value.
+ *
+ *      Bit mapping:
+ *          bit0  -> pin0
+ *          bit1  -> pin1
+ *          ...
+ *          bit15 -> pin15
+ *
+ * @Note:
+ *      The function reads the state of the entire
+ *      port from the IDR (Input Data Register) of
+ *      the GPIO peripheral.
+ */
+uint16_t gpio_get_port_level(GPIO_RegDef_t *pGPIOx_addr)
+{
+    return (uint16_t)(pGPIOx_addr->IDR);
+}
+
+/****************************************************
+ * @intro:
+ *      This function sets the logic level of a
+ *      specific GPIO pin.
+ *
+ * @param[in]:
+ *      GPIO_RegDef_t *pGPIOx_addr
+ *      Pointer to the GPIO peripheral registers
+ *      (GPIOA, GPIOB, GPIOC, etc).
+ *
+ * @param[in]:
+ *      uint8_t pin_number
+ *      Specifies the GPIO pin number whose logic
+ *      level needs to be modified.
+ *
+ * @param[in]:
+ *      uint8_t pin_state
+ *      Specifies the logic state to be written to
+ *      the pin.
+ *          0 -> Logic LOW
+ *          1 -> Logic HIGH
+ *
+ * @return:
+ *      None
+ *
+ * @Note:
+ *      The function writes the pin state to the
+ *      ODR (Output Data Register) of the GPIO
+ *      peripheral.
+ */
+void gpio_set_pin_level(GPIO_RegDef_t *pGPIOx_addr, uint8_t pin_number, uint8_t pin_state)
+{
+    if (pin_state == 1)
+    {
+        pGPIOx_addr->ODR |= (1U << pin_number);
+    }
+    else if (pin_state == 0)
+    {
+        pGPIOx_addr->ODR &= ~(1U << pin_number);
+    }
+}
+
+/****************************************************
+ * @intro:
+ *      This function sets the logic level of all
+ *      pins of a GPIO port at once.
+ *
+ * @param[in]:
+ *      GPIO_RegDef_t *pGPIOx_addr
+ *      Pointer to the GPIO peripheral registers
+ *      (GPIOA, GPIOB, GPIOC, etc).
+ *
+ * @param[in]:
+ *      uint16_t port_state
+ *      Specifies the logic levels to be written to
+ *      the entire port.
+ *
+ *      Bit mapping:
+ *          bit0  -> pin0
+ *          bit1  -> pin1
+ *          ...
+ *          bit15 -> pin15
+ *
+ * @return:
+ *      None
+ *
+ * @Note:
+ *      The function writes the provided 16 bit value
+ *      directly into the ODR (Output Data Register)
+ *      of the GPIO peripheral.
+ */
+void gpio_set_port_level(GPIO_RegDef_t *pGPIOx_addr, uint16_t port_state)
+{
+    pGPIOx_addr->ODR = port_state;
+}
+
+/****************************************************
+ * @intro:
+ *      This function toggles the current logic level
+ *      of a specific GPIO pin.
+ *
+ * @param[in]:
+ *      GPIO_RegDef_t *pGPIOx_addr
+ *      Pointer to the GPIO peripheral registers
+ *      (GPIOA, GPIOB, GPIOC, etc).
+ *
+ * @param[in]:
+ *      uint8_t pin_number
+ *      Specifies the GPIO pin number whose logic
+ *      level needs to be toggled.
+ *
+ * @return:
+ *      None
+ *
+ * @Note:
+ *      The function modifies the ODR (Output Data
+ *      Register) of the GPIO peripheral. The XOR
+ *      operation flips the current state of the pin:
+ *          HIGH becomes LOW
+ *          LOW becomes HIGH
+ */
+void gpio_toggle_pin(GPIO_RegDef_t *pGPIOx_addr, uint8_t pin_number)
+{
+    pGPIOx_addr->ODR ^= (1U << pin_number);
+}
+
+/****************************************************
+ * @intro:
+ *      This function enables or disables an interrupt
+ *      in the NVIC (Nested Vector Interrupt Controller).
+ *
+ * @param[in]:
+ *      IRQn_Type IRQ_number
+ *      Interrupt number corresponding to the peripheral
+ *      interrupt source.
+ *
+ * @param[in]:
+ *      uint8_t IRQ_priority
+ *      Priority level to be assigned to the interrupt.
+ *      (Priority configuration may be implemented later.)
+ *
+ * @param[in]:
+ *      uint8_t state
+ *      ENABLE  -> enable interrupt in NVIC
+ *      DISABLE -> disable interrupt in NVIC
+ *
+ * @return:
+ *      None
+ *
+ * @Note:
+ *      NVIC uses multiple ISER and ICER registers where
+ *      each register controls 32 interrupt lines.
+ *
+ *      IRQ_number / 32 selects which NVIC register.
+ *      IRQ_number % 32 selects the bit inside that register.
+ *      IRQ_Priority -> of 0xFF or 255 means u dont want to set a particular priority!
+ */
+void gpio_irq_config(IRQn_Type IRQ_number, uint8_t IRQ_priority, uint8_t state)
+{
+    // Based on state to enable or diable an interrupt
+    if(state == ENABLE)
+    {
+        NVIC->ISER[IRQ_number / 32] |= (1U << (IRQ_number % 32));
+    }
+    else
+    {
+        NVIC->ICER[IRQ_number / 32] |= (1U << (IRQ_number % 32));
+    }
+
+    if (IRQ_priority != IRQ_PRIORITY_SKIP)
+    {
+        // Even though lower bits are ignored, it’s safer to mask:
+        NVIC->IP[IRQ_number] &= ~(0xF << 4);
+        // Setting Priority: On Cortex-M4 (STM32F407)->priority field = only upper 4 bits used, i.e. priority bits = [7:4] lower bits ignored
+        NVIC->IP[IRQ_number] = (IRQ_priority << 4);
+    }
+}
+
+/****************************************************
+ * @intro:
+ *      This function handles a GPIO interrupt by
+ *      clearing the pending interrupt flag in the
+ *      EXTI controller.
+ *
+ * @param[in]:
+ *      uint8_t pin_number
+ *      Specifies the GPIO pin number associated with
+ *      the EXTI line that generated the interrupt.
+ *
+ * @return:
+ *      None
+ *
+ * @Note:
+ *      The EXTI controller sets a pending flag in the
+ *      PR (Pending Register) whenever an interrupt
+ *      event occurs on a configured EXTI line.
+ *
+ *      Before exiting the interrupt service routine,
+ *      this pending flag must be cleared, otherwise
+ *      the interrupt will immediately trigger again.
+ *
+ *      The EXTI pending flag is cleared by writing
+ *      a '1' to the corresponding bit in the PR
+ *      register.
+ *
+ *      Example:
+ *          EXTI->PR |= (1U << pin_number);
+ */
+void gpio_irq_handle(uint8_t pin_number)
+{
+    if(EXTI->PR & (1U << pin_number))
+    {
+        EXTI->PR |= (1U << pin_number);   /* clear pending bit */
+    }
+}
