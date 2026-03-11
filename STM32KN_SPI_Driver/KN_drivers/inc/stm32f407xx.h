@@ -461,9 +461,12 @@ typedef struct
   __IO uint32_t I2SPR;      /*!< SPI_I2S prescaler register,                         Address offset: 0x20 */
 } SPI_RegDef_t;
 
-#define SPI1    ((SPI_RegDef_t *)SPI1_BASE)
-#define SPI2    ((SPI_RegDef_t *)SPI2_BASE)
-#define SPI3    ((SPI_RegDef_t *)SPI3_BASE)
+#define SPI1        ((SPI_RegDef_t *)SPI1_BASE)
+#define SPI2        ((SPI_RegDef_t *)SPI2_BASE)
+#define SPI3        ((SPI_RegDef_t *)SPI3_BASE)
+
+#define SPI4_BASE   (APB2PERIPH_BASE + 0x3400UL)
+#define SPI4        ((SPI_RegDef_t *)SPI4_BASE)
 
 /************************************************************************/
 /* Peripheral Clock Enable & Disable MACRO deinations for SPI's peripheral's */
@@ -471,9 +474,11 @@ typedef struct
 #define SPI1_PCLK_EN()    (RCC->APB2ENR |= (1U << 12))
 #define SPI2_PCLK_EN()    (RCC->APB1ENR |= (1U << 14))
 #define SPI3_PCLK_EN()    (RCC->APB1ENR |= (1U << 15))
+#define SPI4_PCLK_EN()    (RCC->APB2ENR |= (1U << 13))
 
 #define SPI1_PCLK_DI()    (RCC->APB2ENR &= ~(1U << 12))
 #define SPI2_PCLK_DI()    (RCC->APB1ENR &= ~(1U << 14))
 #define SPI3_PCLK_DI()    (RCC->APB1ENR &= ~(1U << 15))
+#define SPI4_PCLK_DI()    (RCC->APB2ENR &= ~(1U << 13))
 
 #endif /* INC_STM32F407XX_H_ */
