@@ -66,6 +66,36 @@ typedef struct __SPI_HandleTypeDef
 //   HAL_LockTypeDef            Lock;           /*!< Locking object     <WILL PORT IN FUTURE>                           */
   __IO SPI_StateTypeDef  State;          /*!< SPI communication state                  */
   __IO uint32_t              ErrorCode;      /*!< SPI Error code                           */
-} SPI_HandleTypeDef;
+} SPI_Handle_t;
+
+/************************************************************************/
+/* Function prototypes for SPI specific API's */
+/************************************************************************/
+/**
+ * API to control clock enabling & disabling for a SPI peripheral{1-4} 
+ */
+void spi_clk_ctrl(SPI_RegDef_t *pSPIx_addr, uint8_t state);
+
+/**
+ * API's to init/deinit a SPI pin as per settings!
+ */
+void spi_init(SPI_Handle_t *pSPI_handle);
+void spi_deinit(SPI_RegDef_t *pSPIx_addr);
+
+/**
+ * API's to send/receive {Blocking Mode}
+ */
+void spi_send_data(SPI_RegDef_t *pSPIx_addr, uint8_t *pTX_buffer, uint32_t data_len);
+void spi_receive_data(SPI_RegDef_t *pSPIx_addr, uint8_t *pTX_buffer, uint32_t data_len);
+
+/**
+ * API's for Interrupt Handling
+ */
+void spi_irq_config(IRQn_Type IRQ_number, uint8_t IRQ_priority, uint8_t state);
+void spi_irq_handle(SPI_Handle_t *pSPI_handle);
+
+/**
+ * Future & Advanced API's for tasks!
+ */
 
 #endif /* INC_SPI_DRIVER_H_ */
