@@ -10,6 +10,55 @@
 
 #include "stm32f407xx.h"
 
+/**
+ * @SPI_Mode Macros!
+ */
+#define SPI_MODE_SLAVE      0U
+#define SPI_MODE_MASTER     1U
+
+/**
+ * @SPI_Direction MACROs
+ */
+#define SPI_COM_FD            1U // Full Duplex
+#define SPI_COM_HD            2U // Half Duplex
+#define SPI_COM_SIMPLEX_RX    3U // Simplex in RX MODE only
+
+/**
+ * @ SPI_Data_Size Macros.  
+ */
+#define BYTE_FRAME_LEN      0U // 8 bit DFF
+#define DOUBLE_FRAME_LEN    1U // 16 Bit DFF
+
+/**
+ * @SPI_BaudRate_Prescaler Macros
+ */
+#define SPI_CLK_DIV2          0U // This divided the clock freq by 2, i.e. prescalar of 2
+#define SPI_CLK_DIV4          1U
+#define SPI_CLK_DIV8          2U
+#define SPI_CLK_DIV16         3U
+#define SPI_CLK_DIV32         4U
+#define SPI_CLK_DIV64         5U
+#define SPI_CLK_DIV128        6U
+#define SPI_CLK_DIV256        7U
+
+/**
+ * @SPI_Clock_Polarity {CPOL} Macros
+ */
+#define SPI_CPOL_LOW          0U
+#define SPI_CPOL_HIGH         1U
+
+/**
+ * @SPI_Clock_Phase {CPHA} Macros
+ */
+#define SPI_CPHA_LOW          0U
+#define SPI_CPHA_HIGH         1U
+
+/**
+ * @SPI_Slave_Select_management Macros {Basically SSM H/W or S/W slave selection}
+ */
+#define SPI_HW_SS     0U
+#define SPI_SW_SS     1U
+
 /************************************************************************/
 /* A Configuration Structure for SPI pin holding all its settings */
 /************************************************************************/
