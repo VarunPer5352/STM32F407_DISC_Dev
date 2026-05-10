@@ -468,3 +468,193 @@ For this tracked git project, the required support files are already present:
 - project header: `Inc/main.h`
 
 So the missing part in an empty project is usually not the header files, but making sure the startup/system initialization path is completed correctly.
+
+## Step 13: Verify the FPU with Debugger-Visible Float Calculations
+![i16](./Assets/i16.png)
+
+After the hardware FPU setup is done, it is useful to test floating-point arithmetic without adding UART, ITM, SWV, or `printf`.
+
+The simplest way is to use `volatile` floating-point variables and watch them in the debugger.
+
+Use `volatile` because it prevents the compiler from optimizing the variables away. That makes the values visible in the **Expressions** or **Live Expressions** window during debugging.
+
+A minimal debugger-friendly FPU test can look like this:
+
+```c
+#include <stdint.h>
+#include "main.h"
+
+void SystemInit(void)
+{
+#if (__FPU_PRESENT == 1U) && (__FPU_USED == 1U)
+    SCB->CPACR |= ((3UL << (10U * 2U)) | (3UL << (11U * 2U)));
+    __DSB();
+    __ISB();
+#endif
+}
+
+volatile float dbg_adc_raw = 2048.0f;
+volatile float dbg_vref = 3.3f;
+volatile float dbg_adc_voltage = 0.0f;
+volatile float dbg_sensor_offset = 1.65f;
+volatile float dbg_sensor_sensitivity = 0.330f;
+volatile float dbg_sensor_value = 0.0f;
+volatile float dbg_filtered_value = 0.0f;
+volatile uint32_t dbg_fpu_counter = 0;
+
+static void FPU_DebugCalc(void);
+
+int main(void)
+{
+    while (1)
+    {
+        FPU_DebugCalc();
+    }
+}
+
+static void FPU_DebugCalc(void)
+{
+    dbg_adc_voltage = (dbg_adc_raw * dbg_vref) / 4095.0f;
+    dbg_sensor_value = (dbg_adc_voltage - dbg_sensor_offset) / dbg_sensor_sensitivity;
+    dbg_filtered_value = (0.90f * dbg_filtered_value) + (0.10f * dbg_sensor_value);
+
+    dbg_adc_raw += 17.0f;
+    if (dbg_adc_raw > 4095.0f)
+    {
+        dbg_adc_raw = 0.0f;
+    }
+
+    dbg_fpu_counter++;
+}
+```
+
+Add these variables to the debugger **Expressions** window:
+
+- `dbg_adc_raw`
+- `dbg_adc_voltage`
+- `dbg_sensor_value`
+- `dbg_filtered_value`
+- `dbg_fpu_counter`
+
+Place a breakpoint at the function call or inside `FPU_DebugCalc()`.
+
+On the first stop, the variables may still show their default initialized values.
+
+After one completed call to `FPU_DebugCalc()`, the expected values are approximately:
+
+```text
+dbg_adc_raw         = 2065
+dbg_adc_voltage     = 1.6504029
+dbg_sensor_value    = 0.001221
+dbg_filtered_value  = 0.0001221
+dbg_fpu_counter     = 1
+```
+
+This is correct because the first calculation starts with:
+
+```text
+dbg_adc_raw = 2048
+dbg_vref    = 3.3
+```
+
+The voltage calculation is:
+
+```text
+dbg_adc_voltage = (2048 * 3.3) / 4095
+                = 1.6504029 approximately
+```
+
+Then:
+
+```text
+dbg_sensor_value = (1.6504029 - 1.65) / 0.330
+                 = 0.001221 approximately
+```
+
+And the filtered value starts from zero:
+
+```text
+dbg_filtered_value = (0.90 * 0.0) + (0.10 * 0.001221)
+                   = 0.0001221 approximately
+```
+
+Finally:
+
+```text
+dbg_adc_raw += 17
+dbg_adc_raw = 2065
+dbg_fpu_counter = 1
+```
+
+Small decimal differences are normal because `float` uses single-precision binary floating-point representation.
+
+### Hardware FPU vs Software Floating Point
+
+Both hardware FPU mode and software floating-point mode can produce the same kind of numeric result for normal `float` calculations.
+
+The difference is how the work is done.
+
+With software floating point, the compiler uses software helper routines from the ARM runtime library. The answer is still valid, but the CPU spends more instructions doing the calculation.
+
+With hardware FPU enabled, the Cortex-M4F executes dedicated floating-point instructions such as:
+
+```text
+vmul.f32
+vdiv.f32
+vadd.f32
+```
+
+So hardware FPU is usually faster and uses fewer CPU cycles.
+
+The FPU is not like DMA.
+
+DMA can move data independently while the CPU does other work. The FPU is instead a math execution unit attached to the CPU core. The CPU still executes instructions, but floating-point operations are handled by dedicated hardware instead of long software routines.
+
+For STM32F407, the hardware FPU is single precision. That means it accelerates `float` very well.
+
+Use `float` literals with the `f` suffix:
+
+```c
+3.3f
+4095.0f
+0.90f
+```
+
+Avoid accidentally using `double` literals like:
+
+```c
+3.3
+4095.0
+0.90
+```
+
+because plain decimal constants are `double` in C.
+
+The STM32F407 does not have a double-precision hardware FPU. So `double` calculations are normally handled in software and are slower.
+
+Software `double` can be more mathematically precise than `float`, but that does not automatically make it better for embedded sensor work.
+
+For example, a 12-bit ADC has only 4096 possible counts. With a 3.3 V reference:
+
+```text
+ADC step size = 3.3 / 4095
+              = 0.000805 V approximately
+```
+
+That is about 0.805 mV per ADC count.
+
+A `float` already has more precision than the ADC measurement itself in many practical sensor applications. Using `double` may only show more decimal digits without adding real sensor accuracy.
+
+Use this rule:
+
+- use hardware `float` for STM32F407 sensor math, filters, calibration, PID, control loops, and driver calculations
+- use software floating point only when simplicity or compatibility is more important than speed
+- use `double` only when the project truly needs higher numerical precision and can afford the extra code size and execution time
+
+For this guide and this MCU, the recommended practical setup is:
+
+- `FPv4-SP-D16`
+- `Hardware implementation (-mfloat-abi=hard)`
+- `SystemInit()` enables the FPU before `main()`
+- calculations use `float` and `f` suffix constants
+- debugger verification is done through `volatile` variables, not UART or `printf`
