@@ -465,7 +465,7 @@ typedef struct
 #define SPI2        ((SPI_RegDef_t *)SPI2_BASE)
 #define SPI3        ((SPI_RegDef_t *)SPI3_BASE)
 
-#define SPI4_BASE   (APB2PERIPH_BASE + 0x3400UL)
+#define SPI4_BASE   (APB2PERIPH_BASE + 0x3400UL) // Special in STM32F407VGT6 Disc Board!
 #define SPI4        ((SPI_RegDef_t *)SPI4_BASE)
 
 /************************************************************************/
@@ -480,5 +480,14 @@ typedef struct
 #define SPI2_PCLK_DI()    (RCC->APB1ENR &= ~(1U << 14))
 #define SPI3_PCLK_DI()    (RCC->APB1ENR &= ~(1U << 15))
 #define SPI4_PCLK_DI()    (RCC->APB2ENR &= ~(1U << 13))
+
+/**
+ * SPI1,2,3 & 4 Peripheral Register complete DEINIT/RESET
+ * CAUTION: First set it then reset it if u dont reset then the periph will remain in reset forever unless again reset ok!
+ */
+#define SPI1_REG_RESET()   do{ (RCC->APB2RSTR |= (1U << 12)); (RCC->APB2RSTR &= ~(1U << 12)); } while (0)
+#define SPI2_REG_RESET()   do{ (RCC->APB1RSTR |= (1U << 14)); (RCC->APB1RSTR &= ~(1U << 14)); } while (0)
+#define SPI3_REG_RESET()   do{ (RCC->APB1RSTR |= (1U << 15)); (RCC->APB1RSTR &= ~(1U << 15)); } while (0)
+#define SPI4_REG_RESET()   do{ (RCC->APB2RSTR |= (1U << 13)); (RCC->APB2RSTR &= ~(1U << 13)); } while (0)
 
 #endif /* INC_STM32F407XX_H_ */
