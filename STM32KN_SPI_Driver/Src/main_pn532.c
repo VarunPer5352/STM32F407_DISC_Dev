@@ -611,6 +611,7 @@ void pn532_com_deselect(SPI_RegDef_t *pSPIx_addr);
 uint8_t pn532_read_status(void);
 pn532_status_t pn532_wait_ready(uint32_t max_polls);
 pn532_status_t pn532_write_command(uint8_t command, const uint8_t *data, uint8_t data_len);
+pn532_status_t pn532_read_ack(void);
 
 int main(void)
 {
@@ -807,5 +808,33 @@ pn532_status_t pn532_write_command(uint8_t command, const uint8_t *data, uint8_t
     }
 
     pn532_deselect();
+    return PN532_OK;
+}
+
+/******************************************************************************
+ * @brief  Read and validate the six-byte PN532 ACK frame.
+ ******************************************************************************/
+pn532_status_t pn532_read_ack(void)
+{
+    static const uint8_t expected_ack[6] = { 0x00, 0x00, 0xFF, 0x00, 0xFF, 0x00 }; // The known good response from PN532-module
+
+    uint8_t ack[6];
+    pn532_select();
+    
+    // DATA_READ tells PN532 that subsequent clocks are for reading a frame.
+    (void)pn532_spi_transfer_byte(PN532_SPI_DATA_READ);
+    for (uint8_t i = 0; i < sizeof(ack); i++)
+    {
+        // Accept the acknowledgement's from module!
+        ack[i] = pn532_spi_transfer_byte(0x00);
+    }
+
+    pn532_deselect();
+
+    if (memcmp(ack, expected_ack, sizeof(expected_ack)) != 0) // If response from module dosent match the known "expected_ack"
+    {
+        return PN532_ERR_ACK;
+    }
+
     return PN532_OK;
 }
