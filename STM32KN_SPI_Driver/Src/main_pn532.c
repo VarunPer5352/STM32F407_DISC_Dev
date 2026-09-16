@@ -616,6 +616,8 @@ pn532_status_t pn532_read_response(uint8_t expected_command, uint8_t *response, 
 uint8_t pn532_spi_transfer_byte(uint8_t byte);
 pn532_status_t pn532_command_transaction(uint8_t command, const uint8_t *command_data, uint8_t command_data_len, uint8_t *response, uint8_t response_size, uint8_t *response_len,  uint32_t response_poll_limit);
 static pn532_status_t pn532_get_firmware_version(void);
+static pn532_status_t pn532_sam_config(void);
+pn532_status_t pn532_read_passive_target(uint8_t *uid, uint8_t *uid_len);
 
 int main(void)
 {
@@ -1065,4 +1067,74 @@ static pn532_status_t pn532_sam_config(void)
     uint8_t response_len = 0;
 
     return pn532_command(PN532_CMD_SAM_CONFIGURATION, parameters, sizeof(parameters), NULL, 0, &response_len, 500U);
+}
+
+/******************************************************************************
+ * @brief Search for one ISO14443A / MIFARE-compatible passive target.
+ *
+ * InListPassiveTarget command: D4 4A 01 00
+ *      4A = InListPassiveTarget
+ *      01 = detect maximum one target
+ *      00 = 106 kbps ISO14443 Type A
+ *
+ * @param uid      Destination UID array.
+ * @param uid_len  Returned UID length.
+ *
+ * @return
+ *      PN532_OK       Tag found and UID returned
+ *      PN532_NO_TAG   No tag detected
+ *      other          Communication/protocol error
+ ******************************************************************************/
+pn532_status_t pn532_read_passive_target(uint8_t *uid, uint8_t *uid_len)
+{
+    const uint8_t parameters[] =
+    {
+        0x01,       /* MaxTg = detect at most one target */
+        0x00        /* BrTy = ISO14443A, 106 kbps */
+    };
+
+    uint8_t response[32];
+    uint8_t response_len = 0;
+
+    pn532_status_t status;
+
+    status = pn532_command(PN532_CMD_IN_LIST_PASSIVE, parameters, sizeof(parameters), response, sizeof(response), & response_len, 5000U);
+    if (status != PN532_OK)
+    {
+        return status;
+    }
+
+    // First response byte = NbTg
+    if (response_len < 1U)
+    {
+        return PN532_ERR_RESPONSE;
+    }
+    
+    // NbTg == 0 means the command worked but no NFC target was detected
+    if (response[0] == 0U)
+    {
+        *uid_len = 0;
+        return PN532_NO_TAG;
+    }
+
+    // ISO14443A response layout: response[0] = NbTg | response[1] = Tg | response[2] = SENS_RES byte 0 |response[3] = SENS_RES byte 1 | response[4] = SEL_RES | response[5] = NFCIDLength | response[6...] = NFCID / UID bytes
+    if (response_len < 6U)
+    {
+        return PN532_ERR_RESPONSE;
+    }
+
+    uint8_t nfcid_length = response[5];
+    if (nfcid_length > PN532_MAX_UID_SIZE)
+    {
+        return PN532_ERR_BUFFER;
+    }
+    if (response_len < (uint8_t)(6U + nfcid_length))
+    {
+        return PN532_ERR_RESPONSE;
+    }
+
+    memcpy(uid, &response[6], nfcid_length);
+    *uid_len = nfcid_length;
+
+    return PN532_OK;
 }
