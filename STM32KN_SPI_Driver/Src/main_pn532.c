@@ -614,6 +614,7 @@ pn532_status_t pn532_write_command(uint8_t command, const uint8_t *data, uint8_t
 pn532_status_t pn532_read_ack(void);
 pn532_status_t pn532_read_response(uint8_t expected_command, uint8_t *response, uint8_t response_size, uint8_t *response_len);
 uint8_t pn532_spi_transfer_byte(uint8_t byte);
+pn532_status_t pn532_command_transaction(uint8_t command, const uint8_t *command_data, uint8_t command_data_len, uint8_t *response, uint8_t response_size, uint8_t *response_len,  uint32_t response_poll_limit);
 
 int main(void)
 {
@@ -960,4 +961,42 @@ pn532_status_t pn532_read_response(uint8_t expected_command, uint8_t *response, 
 uint8_t pn532_spi_transfer_byte(uint8_t byte)
 {
     return spi_transfer_data(SPI2, byte);
+}
+
+/******************************************************************************
+ * @brief Execute one complete PN532 command-response transaction.
+ *
+ * Sequence: Write command -> Wait READY -> Read ACK -> Wait READY -> Read response
+ ******************************************************************************/
+pn532_status_t pn532_command_transaction(uint8_t command, const uint8_t *command_data, uint8_t command_data_len, uint8_t *response, uint8_t response_size, uint8_t *response_len,  uint32_t response_poll_limit)
+{
+    pn532_status_t status;
+
+    status = pn532_write_command(command, command_data, command_data_len);
+    if (status != PN532_OK)
+    {
+        return status;
+    }
+
+    // PN532 should produce ACK within this amount of retries!
+    status = pn532_wait_ready(200U);
+    if (status != PN532_OK)
+    {
+        return status;
+    }
+
+    status = pn532_read_ack();
+    if (status != PN532_OK)
+    {
+        return status;
+    }
+
+    // Command execution can take considerably longer than generation of ACK.
+    status = pn532_wait_ready(response_poll_limit);
+    if (status != PN532_OK)
+    {
+        return status;
+    }
+
+    return pn532_read_response(command, response, response_size, response_len);
 }
