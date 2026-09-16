@@ -1034,3 +1034,35 @@ static pn532_status_t pn532_get_firmware_version(void)
 
     return PN532_OK;
 }
+
+/******************************************************************************
+ * @brief Configure PN532 for normal operating mode.
+ *
+ * PN532 command payload:
+ *
+ *      D4 14 01 14 01
+ *
+ * where:
+ *
+ *      14 = SAMConfiguration command
+ *      01 = Normal mode
+ *      14 = Timeout parameter
+ *      01 = Enable PN532 IRQ handling
+ *
+ * Note:
+ * The Timeout field applies to Virtual Card mode. In Normal mode it does
+ * not control our passive-tag polling timeout.
+ ******************************************************************************/
+static pn532_status_t pn532_sam_config(void)
+{
+    const uint8_t parameters[] =
+    {
+        0x01,       /* Mode: Normal */
+        0x14,       /* Timeout field */
+        0x01        /* PN532 IRQ enabled */
+    };
+
+    uint8_t response_len = 0;
+
+    return pn532_command(PN532_CMD_SAM_CONFIGURATION, parameters, sizeof(parameters), NULL, 0, &response_len, 500U);
+}
