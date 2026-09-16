@@ -621,12 +621,57 @@ pn532_status_t pn532_read_passive_target(uint8_t *uid, uint8_t *uid_len);
 
 int main(void)
 {
+    uint8_t uid[PN532_MAX_UID_SIZE];
+    uint8_t uid_len = 0;
+
     spi2_gpio_init(&spi_gpio_t);
     spi2_periph_init(&spi2_t);
 
+    delay_nop(100000); // Small delay for pn532 module to be up
+
+    // Verify basic PN532 SPI communication
+    dbg_pn532_status = pn532_get_firmware_version();
+    if (dbg_pn532_status != PN532_OK)
+    {
+        Error_Handler();
+    }
+
+    // Configure PN532 in Normal SAM mode
+    dbg_pn532_status = pn532_sam_config();
+    if (dbg_pn532_status != PN532_OK)
+    {
+        Error_Handler();
+    }
+
     while (1)
     {
+        // Continuously search for ISO14443A tags!
+        uid_len = 0;
+        dbg_pn532_status = pn532_read_passive_target(uid, &uid_len);
+        if (dbg_pn532_status == PN532_OK)
+        {
+            // A tag was detected successfully & save UID in debugger-visible variables
+            dbg_uid_length = uid_len;
 
+            memset((void *)dbg_uid, 0, sizeof(dbg_uid));
+
+            for (uint8_t i = 0; i < uid_len; i++)
+            {
+                dbg_uid[i] = uid[i];
+            }
+        }
+        else if (dbg_pn532_status == PN532_NO_TAG)
+        {
+            // Communication succeeded, but there is currently no tag inside the RF field.
+            // This is NORMAL and is not an error
+            dbg_uid_length = 0;
+        }
+        else
+        {
+            // Actual PN532/SPI/protocol error: During bring-up leave dbg_pn532_status untouched so the CubeIDE debugger shows exactly what failed
+        }
+
+        delay_nop(500000); // Reducing load on processor
     }
 }
 
