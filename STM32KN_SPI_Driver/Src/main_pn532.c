@@ -609,6 +609,7 @@ void spi2_periph_init(SPI_Handle_t *spi2_t);
 void pn532_com_select(void);
 void pn532_com_deselect(SPI_RegDef_t *pSPIx_addr);
 uint8_t pn532_read_status(void);
+pn532_status_t pn532_wait_ready(uint32_t max_polls);
 
 int main(void)
 {
@@ -719,4 +720,30 @@ uint8_t pn532_read_status(void)
     pn532_com_deselect(SPI2);
     
     return status;
+}
+
+/******************************************************************************
+ * @brief  Poll PN532 until a response/ACK frame becomes available.
+ *
+ * @param  max_polls Maximum number of polling attempts.
+ *
+ * @return PN532_OK if ready, otherwise PN532_ERR_TIMEOUT.
+ *
+ * @note
+ * This is deliberately simple for bring-up.
+ * Later replace delay_nop() with a proper millisecond timer/SysTick timeout.
+ ******************************************************************************/
+pn532_status_t pn532_wait_ready(uint32_t max_polls)
+{
+    while (max_polls--)
+    {
+        if ((pn532_read_status() & PN532_READY_BIT) != 0)
+        {
+            // read status function returned 0000 0001, thus 0001 & 0001 -> 1/true
+            return PN532_OK;
+        }
+        delay_nop(10000);
+    }
+
+    return PN532_ERR_TIMEOUT; // In case of failure to receive any response from module
 }
