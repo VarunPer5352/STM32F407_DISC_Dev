@@ -615,6 +615,7 @@ pn532_status_t pn532_read_ack(void);
 pn532_status_t pn532_read_response(uint8_t expected_command, uint8_t *response, uint8_t response_size, uint8_t *response_len);
 uint8_t pn532_spi_transfer_byte(uint8_t byte);
 pn532_status_t pn532_command_transaction(uint8_t command, const uint8_t *command_data, uint8_t command_data_len, uint8_t *response, uint8_t response_size, uint8_t *response_len,  uint32_t response_poll_limit);
+static pn532_status_t pn532_get_firmware_version(void);
 
 int main(void)
 {
@@ -999,4 +1000,37 @@ pn532_status_t pn532_command_transaction(uint8_t command, const uint8_t *command
     }
 
     return pn532_read_response(command, response, response_size, response_len);
+}
+
+/******************************************************************************
+ * @brief Read PN532 firmware information.
+ *
+ * Response data:
+ *
+ *      IC | VER | REV | SUPPORT
+ ******************************************************************************/
+static pn532_status_t pn532_get_firmware_version(void)
+{
+    uint8_t response[4];
+    uint8_t response_len = 0;
+
+    pn532_status_t status;
+
+    status = pn532_command(PN532_CMD_GET_FIRMWARE, NULL, 0, response, sizeof(response), &response_len, 500U);
+    if (status != PN532_OK)
+    {
+        return status;
+    }
+
+    if (response_len != 4U)
+    {
+        return PN532_ERR_RESPONSE;
+    }
+
+    dbg_fw_ic       = response[0];
+    dbg_fw_version  = response[1];
+    dbg_fw_revision = response[2];
+    dbg_fw_support  = response[3];
+
+    return PN532_OK;
 }
