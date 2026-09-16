@@ -9,30 +9,32 @@
 #define INC_SPI_DRIVER_H_
 
 #include "stm32f407xx.h"
+#include "spi_bitdef.h"
 
 /**
- * @SPI_Mode Macros!
+ * @SPI_Mode Macros! {KN: SPI Device Mode}
  */
-#define SPI_MODE_SLAVE      0U
+#define SPI_MODE_SLAVE      0U // {Default}
 #define SPI_MODE_MASTER     1U
 
 /**
- * @SPI_Direction MACROs
+ * @SPI_Direction MACROs {KN: SPI Bus Config}
  */
 #define SPI_COM_FD            1U // Full Duplex
 #define SPI_COM_HD            2U // Half Duplex
-#define SPI_COM_SIMPLEX_RX    3U // Simplex in RX MODE only
+#define SPI_COM_SIMPLEX_TX    3U // Simplex in TX MODE only
+#define SPI_COM_SIMPLEX_RX    4U // Simplex in RX MODE only
 
 /**
- * @ SPI_Data_Size Macros.  
+ * @ SPI_Data_Size Macros.  {KN: SPI DFF}
  */
-#define BYTE_FRAME_LEN      0U // 8 bit DFF
+#define BYTE_FRAME_LEN      0U // 8 bit DFF {default}
 #define DOUBLE_FRAME_LEN    1U // 16 Bit DFF
 
 /**
- * @SPI_BaudRate_Prescaler Macros
+ * @SPI_BaudRate_Prescaler Macros {KN: SPI Clock Speed}
  */
-#define SPI_CLK_DIV2          0U // This divided the clock freq by 2, i.e. prescalar of 2
+#define SPI_CLK_DIV2          0U // This divides the clock freq by 2 {by default}, i.e. prescalar of 2 thus default 16MHz of APB1 makes it 8MHz
 #define SPI_CLK_DIV4          1U
 #define SPI_CLK_DIV8          2U
 #define SPI_CLK_DIV16         3U
@@ -42,22 +44,22 @@
 #define SPI_CLK_DIV256        7U
 
 /**
- * @SPI_Clock_Polarity {CPOL} Macros
+ * @SPI_Clock_Polarity {KN: SPI_CPOL} Macros
  */
 #define SPI_CPOL_LOW          0U
 #define SPI_CPOL_HIGH         1U
 
 /**
- * @SPI_Clock_Phase {CPHA} Macros
+ * @SPI_Clock_Phase {KN: SPI_CPHA} Macros
  */
 #define SPI_CPHA_LOW          0U
 #define SPI_CPHA_HIGH         1U
 
 /**
- * @SPI_Slave_Select_management Macros {Basically SSM H/W or S/W slave selection}
+ * @SPI_Slave_Select_management Macros {Basically KN: SSM H/W or S/W slave selection}
  */
-#define SPI_HW_SS     0U
-#define SPI_SW_SS     1U
+#define SPI_SSM_DISABLED     0U
+#define SPI_SSM_ENABLED      1U
 
 /************************************************************************/
 /* A Configuration Structure for SPI pin holding all its settings */
@@ -67,13 +69,13 @@
   */
 typedef struct
 {
-  uint32_t Mode;                 /* Master / Slave */                                 /*!< Specifies the SPI operating mode.This parameter can be a value of @ref SPI_Mode */
-  uint32_t Direction;            /* Full duplex / Half duplex or Bus Config */        /*!< Specifies the SPI bidirectional mode state.This parameter can be a value of @ref SPI_Direction */
-  uint32_t DataSize;             /* 8-bit / 16-bit */                                 /*!< Specifies the SPI data size.This parameter can be a value of @ref SPI_Data_Size */
-  uint32_t CLKPolarity;          /* CPOL */                                           /*!< Specifies the serial clock steady state.This parameter can be a value of @ref SPI_Clock_Polarity */
-  uint32_t CLKPhase;             /* CPHA */                                           /*!< Specifies the clock active edge for the bit capture.This parameter can be a value of @ref SPI_Clock_Phase */
-  uint32_t NSS;                  /* Hardware / Software NSS or SSM*/                  /*!< Specifies whether the NSS signal is managed byhardware (NSS pin) or by software using the SSI bit.This parameter can be a value of @ref SPI_Slave_Select_management */
-  uint32_t BaudRatePrescaler;    /* Clock divider */                                  /*!< Specifies the Baud Rate prescaler value which will be used to configure the transmit and receive SCK clock.This parameter can be a value of @ref SPI_BaudRate_Prescaler @note The communication clock is derived from the master clock. The slave clock does not need to be set. */
+  uint32_t Mode;                 /* Master / Slave or Device Mode from KN */                                 /*!< Specifies the SPI operating mode.This parameter can be a value of @ref SPI_Mode */
+  uint32_t Direction;            /* Full duplex / Half duplex or Bus Config  from KN */        /*!< Specifies the SPI bidirectional mode state.This parameter can be a value of @ref SPI_Direction */
+  uint32_t DataSize;             /* 8-bit / 16-bit or Data Frme Format from KN */                                 /*!< Specifies the SPI data size.This parameter can be a value of @ref SPI_Data_Size */
+  uint32_t CLKPolarity;          /* SPI CPOL */                                           /*!< Specifies the serial clock steady state.This parameter can be a value of @ref SPI_Clock_Polarity */
+  uint32_t CLKPhase;             /* SPI CPHA */                                           /*!< Specifies the clock active edge for the bit capture.This parameter can be a value of @ref SPI_Clock_Phase */
+  uint32_t NSS;                  /* Hardware / Software NSS or SSM from KN */                  /*!< Specifies whether the NSS signal is managed byhardware (NSS pin) or by software using the SSI bit.This parameter can be a value of @ref SPI_Slave_Select_management */
+  uint32_t BaudRatePrescaler;    /* Clock divider or sclk_speed from KN */                                  /*!< Specifies the Baud Rate prescaler value which will be used to configure the transmit and receive SCK clock.This parameter can be a value of @ref SPI_BaudRate_Prescaler @note The communication clock is derived from the master clock. The slave clock does not need to be set. */
   uint32_t FirstBit;             /* MSB / LSB */                                      /*!< Specifies whether data transfers start from MSB or LSB bit.This parameter can be a value of @ref SPI_MSB_LSB_transmission */
   uint32_t TIMode;               /* TI mode */                                        /*!< Specifies if the TI mode is enabled or not. This parameter can be a value of @ref SPI_TI_mode */
   uint32_t CRCCalculation;       /* CRC enable */                                     /*!< Specifies if the CRC calculation is enabled or not. This parameter can be a value of @ref SPI_CRC_Calculation */
@@ -100,8 +102,8 @@ typedef enum
   */
 typedef struct __SPI_HandleTypeDef
 {
-  SPI_RegDef_t                *Instance;      /*!< SPI registers base address SPI1 to SPI4              */
-  SPI_Config_t            Init;           /*!< SPI communication parameters i.e. Config Settings            */
+  SPI_RegDef_t               *Instance;      /*!< SPI registers base address SPI1 to SPI4              */
+  SPI_Config_t               Init;           /*!< SPI communication parameters i.e. Config Settings            */
   const uint8_t              *pTxBuffPtr;    /*!< Pointer to SPI Tx transfer Buffer        */
   uint16_t                   TxXferSize;     /*!< SPI Tx Transfer size                     */
   __IO uint16_t              TxXferCount;    /*!< SPI Tx Transfer Counter                  */
@@ -135,8 +137,8 @@ void spi_deinit(SPI_RegDef_t *pSPIx_addr);
  * API's to send/receive {Blocking Mode}
  */
 void spi_send_data(SPI_RegDef_t *pSPIx_addr, uint8_t *pTX_buffer, uint32_t data_len);
-void spi_receive_data(SPI_RegDef_t *pSPIx_addr, uint8_t *pTX_buffer, uint32_t data_len);
-
+void spi_receive_data(SPI_RegDef_t *pSPIx_addr, uint8_t *pRX_buffer, uint32_t data_len);
+uint8_t spi_transfer_data(SPI_RegDef_t *pSPIx_addr, uint8_t pTX_byte);
 /**
  * API's for Interrupt Handling
  */
@@ -146,5 +148,9 @@ void spi_irq_handle(SPI_Handle_t *pSPI_handle);
 /**
  * Future & Advanced API's for tasks!
  */
+void spi_ssm_state(SPI_RegDef_t *Instance, uint8_t state);
+void spi_set_state(SPI_RegDef_t *Instance, uint8_t state);
+void spi_ssi_state(SPI_RegDef_t *Instance, uint8_t state);
+void spi_ssoe_state(SPI_RegDef_t *Instance, uint8_t state);
 
 #endif /* INC_SPI_DRIVER_H_ */
