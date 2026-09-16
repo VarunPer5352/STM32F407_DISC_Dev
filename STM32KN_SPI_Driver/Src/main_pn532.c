@@ -612,6 +612,8 @@ uint8_t pn532_read_status(void);
 pn532_status_t pn532_wait_ready(uint32_t max_polls);
 pn532_status_t pn532_write_command(uint8_t command, const uint8_t *data, uint8_t data_len);
 pn532_status_t pn532_read_ack(void);
+pn532_status_t pn532_read_response(uint8_t expected_command, uint8_t *response, uint8_t response_size, uint8_t *response_len);
+uint8_t pn532_spi_transfer_byte(uint8_t byte);
 
 int main(void)
 {
@@ -837,4 +839,125 @@ pn532_status_t pn532_read_ack(void)
     }
 
     return PN532_OK;
+}
+
+/******************************************************************************
+ * @brief  Read and validate a PN532 normal response frame.
+ *
+ * @param expected_command Original command sent to PN532.
+ * @param response         Destination for command-specific response data.
+ * @param response_size    Capacity of response[].
+ * @param response_len     Number of command-specific bytes returned.
+ *
+ * Example:
+ *
+ * Command-01: 0x14 SAMConfiguration
+ *  Expected response command:  0x15
+ *
+ * Command-02: 0x4A InListPassiveTarget
+ *  Expected response command:  0x4B
+ ******************************************************************************/
+pn532_status_t pn532_read_response(uint8_t expected_command, uint8_t *response, uint8_t response_size, uint8_t *response_len)
+{
+    uint8_t frame[PN532_MAX_FRAME_SIZE];
+
+    pn532_com_select();
+    (void)pn532_spi_transfer_byte(PN532_SPI_DATA_READ);
+    // First receive the first 5 bytes
+    for (uint8_t i = 0; i < 5U; i++)
+    {
+        frame[i] = pn532_spi_transfer_byte(0x00);
+    }
+
+    if(frame[0] == 0x00U && frame[1] == 0x00U && frame[2] == 0xFFU)
+    {
+        pn532_deselect();
+        return PN532_ERR_FRAME;
+    }
+
+    uint8_t len = frame[3];
+    uint8_t lcs = frame[4];
+
+    if((uint8_t)(len+lcs) != 0)
+    {
+        pn532_deselect();
+        return PN532_ERR_CHECKSUM;
+    }
+
+    uint16_t total_frame_size = (uint16_t)len + 7U;
+
+    if (total_frame_size > PN532_MAX_FRAME_SIZE)
+    {
+        pn532_deselect();
+        return PN532_ERR_BUFFER;
+    }
+
+    // After these checks its safe to receive rest of the frame sent over MISO by pn532: TFI + RESPONSE_COMMAND + DATA... + DCS + POSTAMBLE
+    for (uint16_t i = 5U; i < total_frame_size; i++)
+    {
+        frame[i] = pn532_spi_transfer_byte(0x00);
+    }
+    pn532_deselect();
+
+    // Special PN532 application error frame contains 0x7F.
+    if ((len == 1U) && (frame[5] == 0x7FU))
+    {
+        return PN532_ERR_RESPONSE;
+    }
+    if (len < 2U)
+    {
+        return PN532_ERR_FRAME;
+    }
+
+    // Verify packet-data checksum.
+    uint8_t checksum = 0;
+    for (uint8_t i = 0; i < len; i++)
+    {
+        checksum += frame[5U + i];
+    }
+
+    /* DCS follows the LEN bytes. */
+    checksum += frame[5U + len];
+    if (checksum != 0U)
+    {
+        return PN532_ERR_CHECKSUM;
+    }
+
+    /* Verify postamble. */
+    if (frame[6U + len] != PN532_POSTAMBLE)
+    {
+        return PN532_ERR_FRAME;
+    }
+
+    // PN532 -> Host response TFI must be D5.
+    if (frame[5] != PN532_PN532_TO_HOST)
+    {
+        return PN532_ERR_RESPONSE;
+    }
+
+    // Response command is always original command + 1.
+    if (frame[6] != (uint8_t)(expected_command + 1U))
+    {
+        return PN532_ERR_RESPONSE;
+    }
+
+    // Remove TFI and response-command bytes & remaining is command-specific response data.
+    uint8_t payload_len = (uint8_t)(len - 2U);
+    if (payload_len > response_size)
+    {
+        return PN532_ERR_BUFFER;
+    }
+
+    if ((response != NULL) && (payload_len > 0U))
+    {
+        memcpy(response, &frame[7], payload_len);
+    }
+
+    *response_len = payload_len;
+    return PN532_OK;
+}
+
+uint8_t pn532_spi_transfer_byte(uint8_t byte)
+{
+    return spi_transfer_data(SPI2, byte);
 }
