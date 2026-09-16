@@ -610,6 +610,7 @@ void pn532_com_select(void);
 void pn532_com_deselect(SPI_RegDef_t *pSPIx_addr);
 uint8_t pn532_read_status(void);
 pn532_status_t pn532_wait_ready(uint32_t max_polls);
+pn532_status_t pn532_write_command(uint8_t command, const uint8_t *data, uint8_t data_len);
 
 int main(void)
 {
@@ -746,4 +747,65 @@ pn532_status_t pn532_wait_ready(uint32_t max_polls)
     }
 
     return PN532_ERR_TIMEOUT; // In case of failure to receive any response from module
+}
+
+/******************************************************************************
+ * @brief  Build and transmit one PN532 normal command frame.
+ *
+ * Frame generated:
+ *
+ *   00 00 FF LEN LCS D4 COMMAND DATA... DCS 00
+ *
+ * SPI wire transaction:
+ *
+ *   01 00 00 FF LEN LCS D4 COMMAND DATA... DCS 00
+ *   ^^
+ *   PN532 SPI DATA_WRITE operation
+ *
+ * @param command    PN532 command byte.
+ * @param data       Optional command parameter bytes.
+ * @param data_len   Number of parameter bytes.
+ ******************************************************************************/
+pn532_status_t pn532_write_command(uint8_t command, const uint8_t *data, uint8_t data_len)
+{
+    uint8_t frame[PN532_MAX_FRAME_SIZE]; // Complete frame to be sent to module
+    uint8_t len = (uint8_t)(2U + data_len); // TFI = 1 byte, COMMAND = 1 byte, DATA = data_len bytes
+    uint8_t frame_size = (uint8_t)(len + 7U); // PREAMBLE{1B}, START CODE{2B}, LEN + LCS{2B}, data field{lenB}, DCS{1B}, POSTAMBLE{1B} thus Total = (len + 7) B or Bytes 
+
+    if (frame_size > PN532_MAX_FRAME_SIZE)
+    {
+        return PN532_ERR_BUFFER; // Invalid as it exceeds com protocol of this NXP module
+    }
+
+    // Building frame with relevant static & dynamic data
+    frame[0] = PN532_PREAMBLE;
+    frame[1] = PN532_START_CODE_1;
+    frame[2] = PN532_START_CODE_2;
+    frame[3] = len;
+    frame[4] = (uint8_t)(0U - len); // LEN + LCS must equal 0 modulo 256.
+    frame[5] = PN532_HOST_TO_PN532;
+    frame[6] = command;
+    // Inserting DATA along with checksum
+    uint8_t checksum = PN532_HOST_TO_PN532;
+    checksum += command;
+    for (uint8_t i = 0; i < data_len; i++)
+    {
+        // From 8th onwards data needs to be inserted & add the data into checksum!
+        frame[7U + i] = data[i];
+        checksum += data[i];
+    }
+    // TFI + COMMAND + DATA + DCS must equal 0 modulo 256.
+    frame[7U + data_len] = (uint8_t)(0U - checksum);
+    frame[8U + data_len] = PN532_POSTAMBLE;
+
+    // Sending write command over SPI line
+    pn532_com_select();
+    (void)pn532_spi_transfer_byte(PN532_SPI_DATA_WRITE); // PN532 SPI DATA_WRITE operation
+    for (uint8_t i = 0; i < frame_size; i++)
+    {
+        (void)pn532_spi_transfer_byte(frame[i]);
+    }
+
+    pn532_deselect();
+    return PN532_OK;
 }
