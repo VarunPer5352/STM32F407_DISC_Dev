@@ -731,7 +731,7 @@ void spi2_periph_init(SPI_Handle_t *spi2_t)
 	spi_init(spi2_t); // This sets the settings while spi2 is disabled
 
     /* PN532 SPI transfers every byte LSB-first. */
-    SPI2->CR1 |= SPI_CR1_LSBFIRST;
+    SPI2->CR1 |= (1U << SPI_CR1_LSBFIRST); // As per our custom codebase this macros is not bit masked just position of that bit in reg !
 
 	spi_ssi_state(spi2_t->Instance, ENABLE);
     spi_set_state(spi2_t->Instance, ENABLE);
@@ -858,7 +858,7 @@ pn532_status_t pn532_write_command(uint8_t command, const uint8_t *data, uint8_t
         (void)pn532_spi_transfer_byte(frame[i]);
     }
 
-    pn532_deselect();
+    pn532_com_deselect(SPI2);
     return PN532_OK;
 }
 
@@ -870,7 +870,7 @@ pn532_status_t pn532_read_ack(void)
     static const uint8_t expected_ack[6] = { 0x00, 0x00, 0xFF, 0x00, 0xFF, 0x00 }; // The known good response from PN532-module
 
     uint8_t ack[6];
-    pn532_select();
+    pn532_com_select();
     
     // DATA_READ tells PN532 that subsequent clocks are for reading a frame.
     (void)pn532_spi_transfer_byte(PN532_SPI_DATA_READ);
@@ -880,7 +880,7 @@ pn532_status_t pn532_read_ack(void)
         ack[i] = pn532_spi_transfer_byte(0x00);
     }
 
-    pn532_deselect();
+    pn532_com_deselect(SPI2);
 
     if (memcmp(ack, expected_ack, sizeof(expected_ack)) != 0) // If response from module dosent match the known "expected_ack"
     {
@@ -918,9 +918,9 @@ pn532_status_t pn532_read_response(uint8_t expected_command, uint8_t *response, 
         frame[i] = pn532_spi_transfer_byte(0x00);
     }
 
-    if(frame[0] == 0x00U && frame[1] == 0x00U && frame[2] == 0xFFU)
+    if((frame[0] != 0x00U) || (frame[1] != 0x00U) || (frame[2] != 0xFFU))
     {
-        pn532_deselect();
+        pn532_com_deselect(SPI2);
         return PN532_ERR_FRAME;
     }
 
@@ -929,7 +929,7 @@ pn532_status_t pn532_read_response(uint8_t expected_command, uint8_t *response, 
 
     if((uint8_t)(len+lcs) != 0)
     {
-        pn532_deselect();
+        pn532_com_deselect(SPI2);
         return PN532_ERR_CHECKSUM;
     }
 
@@ -937,7 +937,7 @@ pn532_status_t pn532_read_response(uint8_t expected_command, uint8_t *response, 
 
     if (total_frame_size > PN532_MAX_FRAME_SIZE)
     {
-        pn532_deselect();
+        pn532_com_deselect(SPI2);
         return PN532_ERR_BUFFER;
     }
 
@@ -946,7 +946,7 @@ pn532_status_t pn532_read_response(uint8_t expected_command, uint8_t *response, 
     {
         frame[i] = pn532_spi_transfer_byte(0x00);
     }
-    pn532_deselect();
+    pn532_com_deselect(SPI2);
 
     // Special PN532 application error frame contains 0x7F.
     if ((len == 1U) && (frame[5] == 0x7FU))
@@ -1063,7 +1063,7 @@ static pn532_status_t pn532_get_firmware_version(void)
 
     pn532_status_t status;
 
-    status = pn532_command(PN532_CMD_GET_FIRMWARE, NULL, 0, response, sizeof(response), &response_len, 500U);
+    status = pn532_command_transaction(PN532_CMD_GET_FIRMWARE, NULL, 0, response, sizeof(response), &response_len, 500U);
     if (status != PN532_OK)
     {
         return status;
@@ -1111,7 +1111,7 @@ static pn532_status_t pn532_sam_config(void)
 
     uint8_t response_len = 0;
 
-    return pn532_command(PN532_CMD_SAM_CONFIGURATION, parameters, sizeof(parameters), NULL, 0, &response_len, 500U);
+    return pn532_command_transaction(PN532_CMD_SAM_CONFIGURATION, parameters, sizeof(parameters), NULL, 0, &response_len, 500U);
 }
 
 /******************************************************************************
@@ -1143,7 +1143,7 @@ pn532_status_t pn532_read_passive_target(uint8_t *uid, uint8_t *uid_len)
 
     pn532_status_t status;
 
-    status = pn532_command(PN532_CMD_IN_LIST_PASSIVE, parameters, sizeof(parameters), response, sizeof(response), & response_len, 5000U);
+    status = pn532_command_transaction(PN532_CMD_IN_LIST_PASSIVE, parameters, sizeof(parameters), response, sizeof(response), & response_len, 5000U);
     if (status != PN532_OK)
     {
         return status;
