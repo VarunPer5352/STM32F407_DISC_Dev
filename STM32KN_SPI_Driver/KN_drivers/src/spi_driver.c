@@ -536,3 +536,133 @@ uint8_t spi_transfer_data(SPI_RegDef_t *pSPIx_addr, uint8_t pTX_byte)
 
     return *(volatile uint8_t *)&SPI2->DR;
 }
+
+/****************************************************
+ * @intro:
+ *      This function toggles the current logic level
+ *      of a specific GPIO pin.
+ *
+ * @param[in]:
+ *      GPIO_RegDef_t *pGPIOx_addr
+ *      Pointer to the GPIO peripheral registers
+ *      (GPIOA, GPIOB, GPIOC, etc).
+ *
+ * @param[in]:
+ *      uint8_t pin_number
+ *      Specifies the GPIO pin number whose logic
+ *      level needs to be toggled.
+ *
+ * @return:
+ *      None
+ *
+ * @Note:
+ *      The function modifies the ODR (Output Data
+ *      Register) of the GPIO peripheral. The XOR
+ *      operation flips the current state of the pin:
+ *          HIGH becomes LOW
+ *          LOW becomes HIGH
+ */
+void gpio_toggle_pin(GPIO_RegDef_t *pGPIOx_addr, uint8_t pin_number)
+{
+    pGPIOx_addr->ODR ^= (1U << pin_number);
+}
+
+
+/****************************************************
+ * @intro:
+ *      This function configures the priority and
+ *      enables or disables an interrupt in the NVIC
+ *      (Nested Vector Interrupt Controller).
+ *
+ * @param[in]:
+ *      IRQn_Type IRQ_number
+ *      Device interrupt number for the required
+ *      peripheral. CPU exception numbers are not
+ *      accepted by this function.
+ *
+ * @param[in]:
+ *      uint8_t IRQ_priority
+ *      Priority level from 0 to 15. A lower value
+ *      means a higher interrupt priority.
+ *      IRQ_PRIORITY_SKIP (0xFF) keeps the existing
+ *      priority unchanged.
+ *
+ * @param[in]:
+ *      uint8_t state
+ *      ENABLE  -> enable interrupt in NVIC
+ *      DISABLE -> disable interrupt in NVIC
+ *
+ * @return:
+ *      None
+ *      An out-of-range IRQ number, invalid state,
+ *      or invalid priority returns without changes.
+ *
+ * @Note:
+ *      Each NVIC ISER or ICER register controls
+ *      32 interrupt lines.
+ *      IRQ_number / 32 selects the register.
+ *      IRQ_number % 32 selects the bit inside it.
+ *
+ *      Writing a '1' to ISER enables that interrupt.
+ *      Writing a '1' to ICER disables that interrupt.
+ *      Writing a '0' to either leaves it unchanged.
+ *      Use direct assignment to write only the
+ *      requested interrupt bit.
+ *
+ *      Reading ICER returns the enabled interrupts.
+ *      Using |= would write those '1' bits back and
+ *      disable other enabled interrupts in that bank.
+ *
+ *      Example:
+ *          NVIC->ICER[IRQ_number / 32] =
+ *              (1U << (IRQ_number % 32));
+ *
+ *      STM32F407 stores priority in bits [7:4] of
+ *      each interrupt's priority byte. The priority
+ *      is written before the enable/disable action,
+ *      unless IRQ_PRIORITY_SKIP is specified.
+ *
+ *      This function configures only the NVIC.
+ *      Peripheral interrupt sources and their flags
+ *      must be configured and handled separately.
+ */
+void spi_irq_config(IRQn_Type IRQ_number, uint8_t IRQ_priority, uint8_t state)
+{
+    // Reject CPU exceptions and IRQ numbers beyond this device's range.
+    if (((int32_t)IRQ_number < 0) || ((uint32_t)IRQ_number > (uint32_t)FPU_IRQn))
+    {
+        return;
+    }
+    // Reject invalid states instead of treating them as DISABLE.
+    if ((state != ENABLE) && (state != DISABLE))
+    {
+        return;
+    }
+    // Accept priorities 0-15, or 0xFF to preserve the current priority.
+    if ((IRQ_priority != IRQ_PRIORITY_SKIP) && (IRQ_priority > 15U))
+    {
+        return;
+    }
+
+
+    // Set priority before enabling; only priority bits [7:4] are implemented.
+    if (IRQ_priority != IRQ_PRIORITY_SKIP)
+    {
+        NVIC->IP[IRQ_number] = (uint8_t)(IRQ_priority << 4);
+    }
+
+
+    // /32 selects the register bank; %32 selects the interrupt bit.
+    if (state == ENABLE)
+    {
+        // Writing 1 enables this IRQ; zero bits leave other IRQs unchanged.
+        NVIC->ISER[IRQ_number / 32] = (1U << (IRQ_number % 32));
+    }
+    else
+    {
+        // Use =, not |=: copied enabled bits would disable other IRQs too.
+        NVIC->ICER[IRQ_number / 32] = (1U << (IRQ_number % 32));
+        __DSB();  // Complete the disable write before continuing.
+        __ISB();  // Synchronize subsequent instruction execution.
+    }
+}
