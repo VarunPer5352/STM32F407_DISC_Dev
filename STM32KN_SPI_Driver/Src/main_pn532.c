@@ -530,6 +530,7 @@
 
 #define PN532_MAX_FRAME_SIZE          64U // Maximum PN532 frame buffer used by this driver during initial bring-up
 #define PN532_MAX_UID_SIZE            10U //Type-A UID can be 4, 7, or 10 bytes, so 10 is a sensible buffer
+#define PN532_CMD_RF_CONFIGURATION    0x32U
 
 // Various statuses from documnetation!
 typedef enum{
@@ -553,6 +554,15 @@ volatile uint8_t dbg_fw_revision = 0;
 volatile uint8_t dbg_fw_support = 0;
 volatile uint8_t dbg_uid[PN532_MAX_UID_SIZE] = {0};
 volatile uint8_t dbg_uid_length = 0;
+volatile uint8_t dbg_pn532_raw_status = 0;
+volatile uint8_t dbg_pn532_command = 0;
+/* 1 = write, 2 = ACK wait, 3 = ACK read, 4 = response wait,
+ * 5 = response read, 6 = transaction complete. Inspect after CS is high. */
+volatile uint8_t dbg_pn532_phase = 0;
+volatile uint8_t dbg_pn532_ack_status = 0;
+volatile uint8_t dbg_pn532_response_status = 0;
+volatile uint8_t dbg_pn532_ack[6] = {0};
+volatile uint8_t dbg_pn532_bad_header[5] = {0};
 
 void SystemInit(void)
 {
@@ -618,6 +628,7 @@ pn532_status_t pn532_command_transaction(uint8_t command, const uint8_t *command
 static pn532_status_t pn532_get_firmware_version(void);
 static pn532_status_t pn532_sam_config(void);
 pn532_status_t pn532_read_passive_target(uint8_t *uid, uint8_t *uid_len);
+pn532_status_t pn532_rf_config_max_retries(void);
 
 int main(void)
 {
@@ -627,17 +638,25 @@ int main(void)
     spi2_gpio_init(&spi_gpio_t);
     spi2_periph_init(&spi2_t);
 
-    delay_nop(100000); // Small delay for pn532 module to be up
+    pn532_com_select();
+    delay_nop(10000); // Small delay for pn532 module to be up
+    pn532_com_deselect(SPI2);
 
-    // Verify basic PN532 SPI communication
-    dbg_pn532_status = pn532_get_firmware_version();
+    // Configure PN532 in Normal SAM mode
+    dbg_pn532_status = pn532_sam_config();
     if (dbg_pn532_status != PN532_OK)
     {
         Error_Handler();
     }
 
-    // Configure PN532 in Normal SAM mode
-    dbg_pn532_status = pn532_sam_config();
+    dbg_pn532_status = pn532_rf_config_max_retries();
+    if (dbg_pn532_status != PN532_OK)
+    {
+        Error_Handler();
+    }
+
+    // Verify basic PN532 SPI communication
+    dbg_pn532_status = pn532_get_firmware_version();
     if (dbg_pn532_status != PN532_OK)
     {
         Error_Handler();
@@ -669,6 +688,8 @@ int main(void)
         else
         {
             // Actual PN532/SPI/protocol error: During bring-up leave dbg_pn532_status untouched so the CubeIDE debugger shows exactly what failed
+            dbg_uid_length = 0;
+            Error_Handler(); // Preserve the FIRST failure instead of issuing another command.
         }
 
         delay_nop(500000); // Reducing load on processor
@@ -772,6 +793,8 @@ uint8_t pn532_read_status(void)
 
     pn532_com_deselect(SPI2);
     
+    dbg_pn532_raw_status = status;
+
     return status;
 }
 
@@ -882,6 +905,11 @@ pn532_status_t pn532_read_ack(void)
 
     pn532_com_deselect(SPI2);
 
+    for (uint8_t i = 0; i < sizeof(ack); i++)
+    {
+        dbg_pn532_ack[i] = ack[i];
+    }
+
     if (memcmp(ack, expected_ack, sizeof(expected_ack)) != 0) // If response from module dosent match the known "expected_ack"
     {
         return PN532_ERR_ACK;
@@ -911,6 +939,7 @@ pn532_status_t pn532_read_response(uint8_t expected_command, uint8_t *response, 
     uint8_t frame[PN532_MAX_FRAME_SIZE];
 
     pn532_com_select();
+    delay_nop(1000);   // Give PN532 settling time after CS goes LOW
     (void)pn532_spi_transfer_byte(PN532_SPI_DATA_READ);
     // First receive the first 5 bytes
     for (uint8_t i = 0; i < 5U; i++)
@@ -921,6 +950,10 @@ pn532_status_t pn532_read_response(uint8_t expected_command, uint8_t *response, 
     if((frame[0] != 0x00U) || (frame[1] != 0x00U) || (frame[2] != 0xFFU))
     {
         pn532_com_deselect(SPI2);
+        for (uint8_t i = 0; i < 5U; i++)
+        {
+            dbg_pn532_bad_header[i] = frame[i];
+        }
         return PN532_ERR_FRAME;
     }
 
@@ -1020,6 +1053,11 @@ pn532_status_t pn532_command_transaction(uint8_t command, const uint8_t *command
 {
     pn532_status_t status;
 
+    *response_len = 0;
+    dbg_pn532_command = command;
+    dbg_pn532_ack_status = 0;
+    dbg_pn532_response_status = 0;
+    dbg_pn532_phase = 1;
     status = pn532_write_command(command, command_data, command_data_len);
     if (status != PN532_OK)
     {
@@ -1027,26 +1065,40 @@ pn532_status_t pn532_command_transaction(uint8_t command, const uint8_t *command
     }
 
     // PN532 should produce ACK within this amount of retries!
+    dbg_pn532_phase = 2;
     status = pn532_wait_ready(200U);
+    dbg_pn532_ack_status = dbg_pn532_raw_status;
     if (status != PN532_OK)
     {
         return status;
     }
 
+    delay_nop(1000);
+    dbg_pn532_phase = 3;
     status = pn532_read_ack();
     if (status != PN532_OK)
     {
         return status;
     }
 
+    delay_nop(1000);
     // Command execution can take considerably longer than generation of ACK.
+    dbg_pn532_phase = 4;
     status = pn532_wait_ready(response_poll_limit);
+    dbg_pn532_response_status = dbg_pn532_raw_status;
     if (status != PN532_OK)
     {
         return status;
     }
 
-    return pn532_read_response(command, response, response_size, response_len);
+    delay_nop(1000);
+    dbg_pn532_phase = 5;
+    status = pn532_read_response(command, response, response_size, response_len);
+    if (status == PN532_OK)
+    {
+        dbg_pn532_phase = 6;
+    }
+    return status;
 }
 
 /******************************************************************************
@@ -1182,4 +1234,27 @@ pn532_status_t pn532_read_passive_target(uint8_t *uid, uint8_t *uid_len)
     *uid_len = nfcid_length;
 
     return PN532_OK;
+}
+
+pn532_status_t pn532_rf_config_max_retries(void)
+{
+    const uint8_t parameters[] =
+    {
+        0x05,
+        0x00,
+        0x00,
+        0x00
+    };
+
+    uint8_t response_len = 0;
+
+    return pn532_command_transaction(
+        PN532_CMD_RF_CONFIGURATION,
+        parameters,
+        sizeof(parameters),
+        NULL,
+        0,
+        &response_len,
+        500U
+    );
 }
