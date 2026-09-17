@@ -508,11 +508,11 @@ void gpio_irq_config(IRQn_Type IRQ_number, uint8_t IRQ_priority, uint8_t state)
     // Based on state to enable or diable an interrupt
     if(state == ENABLE)
     {
-        NVIC->ISER[IRQ_number / 32] |= (1U << (IRQ_number % 32));
+        NVIC->ISER[IRQ_number / 32] = (1U << (IRQ_number % 32));
     }
     else
     {
-        NVIC->ICER[IRQ_number / 32] |= (1U << (IRQ_number % 32));
+        NVIC->ICER[IRQ_number / 32] = (1U << (IRQ_number % 32));
     }
 
     if (IRQ_priority != IRQ_PRIORITY_SKIP)
@@ -552,12 +552,13 @@ void gpio_irq_config(IRQn_Type IRQ_number, uint8_t IRQ_priority, uint8_t state)
  *      register.
  *
  *      Example:
- *          EXTI->PR |= (1U << pin_number);
+ *          EXTI->PR = (1U << pin_number);
  */
 void gpio_irq_handle(uint8_t pin_number)
 {
     if(EXTI->PR & (1U << pin_number))
     {
-        EXTI->PR |= (1U << pin_number);   /* clear pending bit */
+        EXTI->PR = (1U << pin_number);   /* clear pending bit */
     }
 }
+
