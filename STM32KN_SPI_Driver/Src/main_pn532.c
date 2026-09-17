@@ -563,6 +563,9 @@ volatile uint8_t dbg_pn532_ack_status = 0;
 volatile uint8_t dbg_pn532_response_status = 0;
 volatile uint8_t dbg_pn532_ack[6] = {0};
 volatile uint8_t dbg_pn532_bad_header[5] = {0};
+volatile uint32_t dbg_pn532_status_ff_count = 0;
+volatile uint32_t dbg_pn532_tag_count = 0;
+volatile uint32_t dbg_pn532_no_tag_count = 0;
 
 void SystemInit(void)
 {
@@ -669,6 +672,7 @@ int main(void)
         dbg_pn532_status = pn532_read_passive_target(uid, &uid_len);
         if (dbg_pn532_status == PN532_OK)
         {
+            dbg_pn532_tag_count++;
             // A tag was detected successfully & save UID in debugger-visible variables
             dbg_uid_length = uid_len;
 
@@ -681,6 +685,7 @@ int main(void)
         }
         else if (dbg_pn532_status == PN532_NO_TAG)
         {
+            dbg_pn532_no_tag_count++;
             // Communication succeeded, but there is currently no tag inside the RF field.
             // This is NORMAL and is not an error
             dbg_uid_length = 0;
