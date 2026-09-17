@@ -525,6 +525,7 @@
 #define PN532_CMD_GET_FIRMWARE        0x02U // GetFirmwareVersion: reads PN532 IC, firmware version, revision and feature support
 #define PN532_CMD_SAM_CONFIGURATION   0x14U // SAMConfiguration: configures PN532 operating mode before NFC operations
 #define PN532_CMD_IN_LIST_PASSIVE     0x4AU // InListPassiveTarget: searches for nearby passive NFC/RFID tags
+#define PN532_CMD_IN_RELEASE          0x52U // InRelease: finish communication with the selected target(s)
 
 #define PN532_READY_BIT               0x01U // Bit 0 of PN532 SPI status byte: 1 = ACK/response data is ready to read
 
@@ -548,6 +549,7 @@ typedef enum{
  * Debug variables: These are deliberately global/volatile so they can be watched directly from the STM32CubeIDE debugger.
  */
 volatile pn532_status_t dbg_pn532_status = PN532_OK;
+volatile pn532_status_t dbg_pn532_release_status = PN532_OK;
 volatile uint8_t dbg_fw_ic = 0;
 volatile uint8_t dbg_fw_version = 0;
 volatile uint8_t dbg_fw_revision = 0;
@@ -632,6 +634,7 @@ static pn532_status_t pn532_get_firmware_version(void);
 static pn532_status_t pn532_sam_config(void);
 pn532_status_t pn532_read_passive_target(uint8_t *uid, uint8_t *uid_len);
 pn532_status_t pn532_rf_config_max_retries(void);
+static pn532_status_t pn532_release_target(void);
 
 int main(void)
 {
@@ -681,6 +684,18 @@ int main(void)
             for (uint8_t i = 0; i < uid_len; i++)
             {
                 dbg_uid[i] = uid[i];
+            }
+
+            /* UID-only polling is finished with this target. Releasing the
+             * last target switches RF off during the existing loop pause,
+             * so the next search starts a fresh activation (UM0701-02 7.3.11).
+             * Future card reads/writes must happen BEFORE this release. */
+            dbg_pn532_release_status = pn532_release_target();
+            if (dbg_pn532_release_status != PN532_OK)
+            {
+                dbg_pn532_status = dbg_pn532_release_status;
+                dbg_uid_length = 0;
+                Error_Handler();
             }
         }
         else if (dbg_pn532_status == PN532_NO_TAG)
@@ -1237,6 +1252,28 @@ pn532_status_t pn532_read_passive_target(uint8_t *uid, uint8_t *uid_len)
 
     memcpy(uid, &response[6], nfcid_length);
     *uid_len = nfcid_length;
+
+    return PN532_OK;
+}
+
+static pn532_status_t pn532_release_target(void)
+{
+    const uint8_t parameters[] = { 0x00 }; // Release all known targets.
+    uint8_t response[1];
+    uint8_t response_len = 0;
+
+    pn532_status_t status = pn532_command_transaction(PN532_CMD_IN_RELEASE,
+        parameters, sizeof(parameters), response, sizeof(response), &response_len, 500U);
+    if (status != PN532_OK)
+    {
+        return status;
+    }
+
+    // InRelease response: D5 53 Status. ACK alone does not confirm release.
+    if ((response_len != 1U) || (response[0] != 0x00U))
+    {
+        return PN532_ERR_RESPONSE;
+    }
 
     return PN532_OK;
 }
