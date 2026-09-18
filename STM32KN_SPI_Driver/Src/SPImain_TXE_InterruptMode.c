@@ -1,0 +1,806 @@
+#include <stdint.h>
+#include "main.h"
+#include <string.h>
+
+/******************************************************************************
+ * PN532 SPI protocol definitions
+ ******************************************************************************/
+#define PN532_SPI_DATA_WRITE          0x01U // STM32 writes a PN532 command frame
+#define PN532_SPI_STATUS_READ         0x02U // STM32 reads PN532 ready/busy status
+#define PN532_SPI_DATA_READ           0x03U // STM32 clocks out ACK/response data from PN532
+
+#define PN532_PREAMBLE                0x00U // First byte of every normal PN532 frame
+#define PN532_START_CODE_1            0x00U // First byte of PN532 frame start sequence: 00 FF
+#define PN532_START_CODE_2            0xFFU // Second byte of PN532 frame start sequence: 00 FF
+#define PN532_POSTAMBLE               0x00U // Final byte appended after the frame checksum
+
+#define PN532_HOST_TO_PN532           0xD4U // TFI value used for commands sent from STM32/host to PN532
+#define PN532_PN532_TO_HOST           0xD5U // TFI value used for responses sent from PN532 back to STM32/host
+
+#define PN532_CMD_GET_FIRMWARE        0x02U // GetFirmwareVersion: reads PN532 IC, firmware version, revision and feature support
+#define PN532_CMD_SAM_CONFIGURATION   0x14U // SAMConfiguration: configures PN532 operating mode before NFC operations
+#define PN532_CMD_IN_LIST_PASSIVE     0x4AU // InListPassiveTarget: searches for nearby passive NFC/RFID tags
+#define PN532_CMD_IN_RELEASE          0x52U // InRelease: finish communication with the selected target(s)
+
+#define PN532_READY_BIT               0x01U // Bit 0 of PN532 SPI status byte: 1 = ACK/response data is ready to read
+
+#define PN532_MAX_FRAME_SIZE          64U // Maximum PN532 frame buffer used by this driver during initial bring-up
+#define PN532_MAX_UID_SIZE            10U //Type-A UID can be 4, 7, or 10 bytes, so 10 is a sensible buffer
+#define PN532_CMD_RF_CONFIGURATION    0x32U
+
+// Various statuses from documnetation!
+typedef enum{
+    PN532_OK = 0,
+    PN532_NO_TAG,
+    PN532_ERR_TIMEOUT,
+    PN532_ERR_ACK,
+    PN532_ERR_FRAME,
+    PN532_ERR_CHECKSUM,
+    PN532_ERR_RESPONSE,
+    PN532_ERR_BUFFER
+} pn532_status_t;
+
+/*
+ * Debug variables: These are deliberately global/volatile so they can be watched directly from the STM32CubeIDE debugger.
+ */
+volatile pn532_status_t dbg_pn532_status = PN532_OK;
+volatile pn532_status_t dbg_pn532_release_status = PN532_OK;
+volatile uint8_t dbg_fw_ic = 0;
+volatile uint8_t dbg_fw_version = 0;
+volatile uint8_t dbg_fw_revision = 0;
+volatile uint8_t dbg_fw_support = 0;
+volatile uint8_t dbg_uid[PN532_MAX_UID_SIZE] = {0};
+volatile uint8_t dbg_uid_length = 0;
+volatile uint8_t dbg_pn532_raw_status = 0;
+volatile uint8_t dbg_pn532_command = 0;
+/* 1 = write, 2 = ACK wait, 3 = ACK read, 4 = response wait,
+ * 5 = response read, 6 = transaction complete. Inspect after CS is high. */
+volatile uint8_t dbg_pn532_phase = 0;
+volatile uint8_t dbg_pn532_ack_status = 0;
+volatile uint8_t dbg_pn532_response_status = 0;
+volatile uint8_t dbg_pn532_ack[6] = {0};
+volatile uint8_t dbg_pn532_bad_header[5] = {0};
+volatile uint32_t dbg_pn532_status_ff_count = 0;
+volatile uint32_t dbg_pn532_tag_count = 0;
+volatile uint32_t dbg_pn532_no_tag_count = 0;
+
+void SystemInit(void)
+{
+#if (__FPU_PRESENT == 1U) && (__FPU_USED == 1U)
+    SCB->CPACR |= ((3UL << (10U * 2U)) | (3UL << (11U * 2U)));
+    __DSB();
+    __ISB();
+#endif
+}
+
+void delay_nop(uint32_t count)
+{
+    while (count--)
+    {
+        __asm volatile ("nop");
+    }
+}
+
+/******************************************************************************
+ * @brief      Handles unrecoverable application errors.
+ *
+ * @details    Disables interrupts and traps the CPU in an infinite loop,
+ *             allowing the debugger to halt execution and inspect the system
+ *             state at the point of failure.
+ *
+ * @return     None
+ ******************************************************************************/
+void Error_Handler(void)
+{
+    __disable_irq();
+
+    while (1)
+    {
+        __NOP();
+    }
+}
+
+volatile float dbg_adc_raw = 2048.0f;
+volatile float dbg_vref = 3.3f;
+volatile float dbg_adc_voltage = 0.0f;
+volatile float dbg_sensor_offset = 1.65f;
+volatile float dbg_sensor_sensitivity = 0.330f;
+volatile float dbg_sensor_value = 0.0f;
+volatile float dbg_filtered_value = 0.0f;
+volatile uint32_t dbg_fpu_counter = 0;
+
+SPI_Handle_t spi2_t;
+GPIO_Handle_t spi_gpio_t;
+
+static void FPU_DebugCalc(void);
+void spi2_gpio_init(GPIO_Handle_t *spi_gpio_t);
+void spi2_periph_init(SPI_Handle_t *spi2_t);
+
+void pn532_com_select(void);
+void pn532_com_deselect(SPI_RegDef_t *pSPIx_addr);
+uint8_t pn532_read_status(void);
+pn532_status_t pn532_wait_ready(uint32_t max_polls);
+pn532_status_t pn532_write_command(uint8_t command, const uint8_t *data, uint8_t data_len);
+pn532_status_t pn532_read_ack(void);
+pn532_status_t pn532_read_response(uint8_t expected_command, uint8_t *response, uint8_t response_size, uint8_t *response_len);
+uint8_t pn532_spi_transfer_byte(uint8_t byte);
+pn532_status_t pn532_command_transaction(uint8_t command, const uint8_t *command_data, uint8_t command_data_len, uint8_t *response, uint8_t response_size, uint8_t *response_len,  uint32_t response_poll_limit);
+static pn532_status_t pn532_get_firmware_version(void);
+static pn532_status_t pn532_sam_config(void);
+pn532_status_t pn532_read_passive_target(uint8_t *uid, uint8_t *uid_len);
+pn532_status_t pn532_rf_config_max_retries(void);
+static pn532_status_t pn532_release_target(void);
+
+int main(void)
+{
+    uint8_t uid[PN532_MAX_UID_SIZE];
+    uint8_t uid_len = 0;
+
+    spi2_gpio_init(&spi_gpio_t);
+    spi2_periph_init(&spi2_t);
+
+    pn532_com_select();
+    delay_nop(10000); // Small delay for pn532 module to be up
+    pn532_com_deselect(SPI2);
+
+    // Configure PN532 in Normal SAM mode
+    dbg_pn532_status = pn532_sam_config();
+    if (dbg_pn532_status != PN532_OK)
+    {
+        Error_Handler();
+    }
+
+    dbg_pn532_status = pn532_rf_config_max_retries();
+    if (dbg_pn532_status != PN532_OK)
+    {
+        Error_Handler();
+    }
+
+    // Verify basic PN532 SPI communication
+    dbg_pn532_status = pn532_get_firmware_version();
+    if (dbg_pn532_status != PN532_OK)
+    {
+        Error_Handler();
+    }
+
+    while (1)
+    {
+        // Continuously search for ISO14443A tags!
+        uid_len = 0;
+        dbg_pn532_status = pn532_read_passive_target(uid, &uid_len);
+        if (dbg_pn532_status == PN532_OK)
+        {
+            dbg_pn532_tag_count++;
+            // A tag was detected successfully & save UID in debugger-visible variables
+            dbg_uid_length = uid_len;
+
+            memset((void *)dbg_uid, 0, sizeof(dbg_uid));
+
+            for (uint8_t i = 0; i < uid_len; i++)
+            {
+                dbg_uid[i] = uid[i];
+            }
+
+            /* UID-only polling is finished with this target. Releasing the
+             * last target switches RF off during the existing loop pause,
+             * so the next search starts a fresh activation (UM0701-02 7.3.11).
+             * Future card reads/writes must happen BEFORE this release. */
+            dbg_pn532_release_status = pn532_release_target();
+            if (dbg_pn532_release_status != PN532_OK)
+            {
+                dbg_pn532_status = dbg_pn532_release_status;
+                dbg_uid_length = 0;
+                Error_Handler();
+            }
+        }
+        else if (dbg_pn532_status == PN532_NO_TAG)
+        {
+            dbg_pn532_no_tag_count++;
+            // Communication succeeded, but there is currently no tag inside the RF field.
+            // This is NORMAL and is not an error
+            dbg_uid_length = 0;
+        }
+        else
+        {
+            // Actual PN532/SPI/protocol error: During bring-up leave dbg_pn532_status untouched so the CubeIDE debugger shows exactly what failed
+            dbg_uid_length = 0;
+            Error_Handler(); // Preserve the FIRST failure instead of issuing another command.
+        }
+
+        delay_nop(500000); // Reducing load on processor
+    }
+}
+
+static void FPU_DebugCalc(void)
+{
+    dbg_adc_voltage = (dbg_adc_raw * dbg_vref) / 4095.0f;
+    dbg_sensor_value = (dbg_adc_voltage - dbg_sensor_offset) / dbg_sensor_sensitivity;
+    dbg_filtered_value = (0.90f * dbg_filtered_value) + (0.10f * dbg_sensor_value);
+
+    dbg_adc_raw += 17.0f;
+    if (dbg_adc_raw > 4095.0f)
+    {
+        dbg_adc_raw = 0.0f;
+    }
+
+    dbg_fpu_counter++;
+}
+
+void spi2_gpio_init(GPIO_Handle_t *spi_gpio_t)
+{
+	spi_gpio_t->pGPIOx_addr = GPIOB;
+	spi_gpio_t->pin_config.Mode = GPIO_MODE_ALTFN;
+	spi_gpio_t->pin_config.Alternate = GPIO_AF5_SPI2;
+	spi_gpio_t->pin_config.OPType = GPIO_OP_PP;
+	spi_gpio_t->pin_config.Pull = GPIO_NOPULL;
+	spi_gpio_t->pin_config.Speed = GPIO_SPEED_FREQ_HIGH;
+
+	spi_gpio_t->pin_config.Pin = GPIO_PIN_13; // Config of SCLK-PB13
+	gpio_init(spi_gpio_t);
+
+	spi_gpio_t->pin_config.Pin = GPIO_PIN_15; // Config of MOSI-PB15
+	gpio_init(spi_gpio_t);
+
+	spi_gpio_t->pin_config.Pin = GPIO_PIN_14; // Config of MISO-PB14
+	gpio_init(spi_gpio_t);
+
+	// PB12 as manual CS GPIO, not AF
+	spi_gpio_t->pin_config.Mode = GPIO_MODE_OUTPUT;
+	spi_gpio_t->pin_config.Alternate = 0;
+	spi_gpio_t->pin_config.Pin = GPIO_PIN_12; // Config of NSS-PB12
+	gpio_init(spi_gpio_t);
+
+    gpio_set_pin_level(GPIOB, GPIO_PIN_12, 1); // CS idle high
+}
+
+void spi2_periph_init(SPI_Handle_t *spi2_t)
+{
+	spi2_t->Instance = SPI2;
+	spi2_t->Init.Direction = SPI_COM_FD;
+	spi2_t->Init.Mode = SPI_MODE_MASTER;
+	spi2_t->Init.BaudRatePrescaler = SPI_CLK_DIV4; // 4MHz sclk as pn532 is rated for max 5MHz
+	spi2_t->Init.DataSize = BYTE_FRAME_LEN; // 8Bit mode
+	spi2_t->Init.CLKPhase = SPI_CPHA_LOW;
+	spi2_t->Init.CLKPolarity = SPI_CPOL_LOW;
+	spi2_t->Init.NSS = SPI_SSM_ENABLED;
+
+	spi_init(spi2_t); // This sets the settings while spi2 is disabled
+
+    /* PN532 SPI transfers every byte LSB-first. */
+    SPI2->CR1 |= (1U << SPI_CR1_LSBFIRST); // As per our custom codebase this macros is not bit masked just position of that bit in reg !
+
+	spi_ssi_state(spi2_t->Instance, ENABLE);
+    spi_set_state(spi2_t->Instance, ENABLE);
+    spi_irq_config(SPI2_IRQn, 2, ENABLE); // first register the IRQ with NVIC via this func with its priority settings & enable it
+}
+
+void pn532_com_select(void)
+{
+    gpio_set_pin_level(GPIOB, GPIO_PIN_12, 0); // Pull CS pin low to begin communication
+}
+
+void pn532_com_deselect(SPI_RegDef_t *pSPIx_addr)
+{
+    while (pSPIx_addr->SR & (1U << SPI_SR_BSY)); // Wait until SPI is not busy!
+
+    gpio_set_pin_level(GPIOB, GPIO_PIN_12, 1); // Pull CS pin high to end communication
+}
+
+/******************************************************************************
+ * @brief  Read the PN532 SPI status byte.
+ *
+ * @return Raw PN532 status byte.
+ *
+ * Bit 0:
+ *      0 = PN532 has no frame ready
+ *      1 = PN532 has a frame ready
+ ******************************************************************************/
+uint8_t pn532_read_status(void)
+{
+    uint8_t status;
+
+    pn532_com_select(); // Initiate com over spi
+    
+    // First tell PN532 that this SPI transaction is a STATUS READ & byte simultaneously received here is ignored.
+    (void)pn532_spi_transfer_byte(PN532_SPI_STATUS_READ);
+
+    // Send dummy byte purely to generate clocks so PN532 can return status.
+    status =  spi_transfer_data(SPI2, 0xFF);
+
+    pn532_com_deselect(SPI2);
+    
+    dbg_pn532_raw_status = status;
+
+    return status;
+}
+
+/******************************************************************************
+ * @brief  Poll PN532 until a response/ACK frame becomes available.
+ *
+ * @param  max_polls Maximum number of polling attempts.
+ *
+ * @return PN532_OK if ready, otherwise PN532_ERR_TIMEOUT.
+ *
+ * @note
+ * This is deliberately simple for bring-up.
+ * Later replace delay_nop() with a proper millisecond timer/SysTick timeout.
+ ******************************************************************************/
+pn532_status_t pn532_wait_ready(uint32_t max_polls)
+{
+    while (max_polls--)
+    {
+        if ((pn532_read_status() & PN532_READY_BIT) != 0)
+        {
+            // read status function returned 0000 0001, thus 0001 & 0001 -> 1/true
+            return PN532_OK;
+        }
+        delay_nop(10000);
+    }
+
+    return PN532_ERR_TIMEOUT; // In case of failure to receive any response from module
+}
+
+/******************************************************************************
+ * @brief  Build and transmit one PN532 normal command frame.
+ *
+ * Frame generated:
+ *
+ *   00 00 FF LEN LCS D4 COMMAND DATA... DCS 00
+ *
+ * SPI wire transaction:
+ *
+ *   01 00 00 FF LEN LCS D4 COMMAND DATA... DCS 00
+ *   ^^
+ *   PN532 SPI DATA_WRITE operation
+ *
+ * @param command    PN532 command byte.
+ * @param data       Optional command parameter bytes.
+ * @param data_len   Number of parameter bytes.
+ ******************************************************************************/
+pn532_status_t pn532_write_command(uint8_t command, const uint8_t *data, uint8_t data_len)
+{
+    uint8_t frame[PN532_MAX_FRAME_SIZE]; // Complete frame to be sent to module
+    uint8_t len = (uint8_t)(2U + data_len); // TFI = 1 byte, COMMAND = 1 byte, DATA = data_len bytes
+    uint8_t frame_size = (uint8_t)(len + 7U); // PREAMBLE{1B}, START CODE{2B}, LEN + LCS{2B}, data field{lenB}, DCS{1B}, POSTAMBLE{1B} thus Total = (len + 7) B or Bytes 
+
+    if (frame_size > PN532_MAX_FRAME_SIZE)
+    {
+        return PN532_ERR_BUFFER; // Invalid as it exceeds com protocol of this NXP module
+    }
+
+    // Building frame with relevant static & dynamic data
+    frame[0] = PN532_PREAMBLE;
+    frame[1] = PN532_START_CODE_1;
+    frame[2] = PN532_START_CODE_2;
+    frame[3] = len;
+    frame[4] = (uint8_t)(0U - len); // LEN + LCS must equal 0 modulo 256.
+    frame[5] = PN532_HOST_TO_PN532;
+    frame[6] = command;
+    // Inserting DATA along with checksum
+    uint8_t checksum = PN532_HOST_TO_PN532;
+    checksum += command;
+    for (uint8_t i = 0; i < data_len; i++)
+    {
+        // From 8th onwards data needs to be inserted & add the data into checksum!
+        frame[7U + i] = data[i];
+        checksum += data[i];
+    }
+    // TFI + COMMAND + DATA + DCS must equal 0 modulo 256.
+    frame[7U + data_len] = (uint8_t)(0U - checksum);
+    frame[8U + data_len] = PN532_POSTAMBLE;
+
+    // Sending write command over SPI line
+    pn532_com_select();
+    (void)pn532_spi_transfer_byte(PN532_SPI_DATA_WRITE); // PN532 SPI DATA_WRITE operation
+    for (uint8_t i = 0; i < frame_size; i++)
+    {
+        (void)pn532_spi_transfer_byte(frame[i]);
+    }
+
+    pn532_com_deselect(SPI2);
+    return PN532_OK;
+}
+
+/******************************************************************************
+ * @brief  Read and validate the six-byte PN532 ACK frame.
+ ******************************************************************************/
+pn532_status_t pn532_read_ack(void)
+{
+    static const uint8_t expected_ack[6] = { 0x00, 0x00, 0xFF, 0x00, 0xFF, 0x00 }; // The known good response from PN532-module
+
+    uint8_t ack[6];
+    pn532_com_select();
+    
+    // DATA_READ tells PN532 that subsequent clocks are for reading a frame.
+    (void)pn532_spi_transfer_byte(PN532_SPI_DATA_READ);
+    for (uint8_t i = 0; i < sizeof(ack); i++)
+    {
+        // Accept the acknowledgement's from module!
+        ack[i] = pn532_spi_transfer_byte(0x00);
+    }
+
+    pn532_com_deselect(SPI2);
+
+    for (uint8_t i = 0; i < sizeof(ack); i++)
+    {
+        dbg_pn532_ack[i] = ack[i];
+    }
+
+    if (memcmp(ack, expected_ack, sizeof(expected_ack)) != 0) // If response from module dosent match the known "expected_ack"
+    {
+        return PN532_ERR_ACK;
+    }
+
+    return PN532_OK;
+}
+
+/******************************************************************************
+ * @brief  Read and validate a PN532 normal response frame.
+ *
+ * @param expected_command Original command sent to PN532.
+ * @param response         Destination for command-specific response data.
+ * @param response_size    Capacity of response[].
+ * @param response_len     Number of command-specific bytes returned.
+ *
+ * Example:
+ *
+ * Command-01: 0x14 SAMConfiguration
+ *  Expected response command:  0x15
+ *
+ * Command-02: 0x4A InListPassiveTarget
+ *  Expected response command:  0x4B
+ ******************************************************************************/
+pn532_status_t pn532_read_response(uint8_t expected_command, uint8_t *response, uint8_t response_size, uint8_t *response_len)
+{
+    uint8_t frame[PN532_MAX_FRAME_SIZE];
+
+    pn532_com_select();
+    delay_nop(1000);   // Give PN532 settling time after CS goes LOW
+    (void)pn532_spi_transfer_byte(PN532_SPI_DATA_READ);
+    // First receive the first 5 bytes
+    for (uint8_t i = 0; i < 5U; i++)
+    {
+        frame[i] = pn532_spi_transfer_byte(0x00);
+    }
+
+    if((frame[0] != 0x00U) || (frame[1] != 0x00U) || (frame[2] != 0xFFU))
+    {
+        pn532_com_deselect(SPI2);
+        for (uint8_t i = 0; i < 5U; i++)
+        {
+            dbg_pn532_bad_header[i] = frame[i];
+        }
+        return PN532_ERR_FRAME;
+    }
+
+    uint8_t len = frame[3];
+    uint8_t lcs = frame[4];
+
+    if((uint8_t)(len+lcs) != 0)
+    {
+        pn532_com_deselect(SPI2);
+        return PN532_ERR_CHECKSUM;
+    }
+
+    uint16_t total_frame_size = (uint16_t)len + 7U;
+
+    if (total_frame_size > PN532_MAX_FRAME_SIZE)
+    {
+        pn532_com_deselect(SPI2);
+        return PN532_ERR_BUFFER;
+    }
+
+    // After these checks its safe to receive rest of the frame sent over MISO by pn532: TFI + RESPONSE_COMMAND + DATA... + DCS + POSTAMBLE
+    for (uint16_t i = 5U; i < total_frame_size; i++)
+    {
+        frame[i] = pn532_spi_transfer_byte(0x00);
+    }
+    pn532_com_deselect(SPI2);
+
+    // Special PN532 application error frame contains 0x7F.
+    if ((len == 1U) && (frame[5] == 0x7FU))
+    {
+        return PN532_ERR_RESPONSE;
+    }
+    if (len < 2U)
+    {
+        return PN532_ERR_FRAME;
+    }
+
+    // Verify packet-data checksum.
+    uint8_t checksum = 0;
+    for (uint8_t i = 0; i < len; i++)
+    {
+        checksum += frame[5U + i];
+    }
+
+    /* DCS follows the LEN bytes. */
+    checksum += frame[5U + len];
+    if (checksum != 0U)
+    {
+        return PN532_ERR_CHECKSUM;
+    }
+
+    /* Verify postamble. */
+    if (frame[6U + len] != PN532_POSTAMBLE)
+    {
+        return PN532_ERR_FRAME;
+    }
+
+    // PN532 -> Host response TFI must be D5.
+    if (frame[5] != PN532_PN532_TO_HOST)
+    {
+        return PN532_ERR_RESPONSE;
+    }
+
+    // Response command is always original command + 1.
+    if (frame[6] != (uint8_t)(expected_command + 1U))
+    {
+        return PN532_ERR_RESPONSE;
+    }
+
+    // Remove TFI and response-command bytes & remaining is command-specific response data.
+    uint8_t payload_len = (uint8_t)(len - 2U);
+    if (payload_len > response_size)
+    {
+        return PN532_ERR_BUFFER;
+    }
+
+    if ((response != NULL) && (payload_len > 0U))
+    {
+        memcpy(response, &frame[7], payload_len);
+    }
+
+    *response_len = payload_len;
+    return PN532_OK;
+}
+
+uint8_t pn532_spi_transfer_byte(uint8_t byte)
+{
+    return spi_transfer_data(SPI2, byte);
+}
+
+/******************************************************************************
+ * @brief Execute one complete PN532 command-response transaction.
+ *
+ * Sequence: Write command -> Wait READY -> Read ACK -> Wait READY -> Read response
+ ******************************************************************************/
+pn532_status_t pn532_command_transaction(uint8_t command, const uint8_t *command_data, uint8_t command_data_len, uint8_t *response, uint8_t response_size, uint8_t *response_len,  uint32_t response_poll_limit)
+{
+    pn532_status_t status;
+
+    *response_len = 0;
+    dbg_pn532_command = command;
+    dbg_pn532_ack_status = 0;
+    dbg_pn532_response_status = 0;
+    dbg_pn532_phase = 1;
+    status = pn532_write_command(command, command_data, command_data_len);
+    if (status != PN532_OK)
+    {
+        return status;
+    }
+
+    // PN532 should produce ACK within this amount of retries!
+    dbg_pn532_phase = 2;
+    status = pn532_wait_ready(200U);
+    dbg_pn532_ack_status = dbg_pn532_raw_status;
+    if (status != PN532_OK)
+    {
+        return status;
+    }
+
+    delay_nop(1000);
+    dbg_pn532_phase = 3;
+    status = pn532_read_ack();
+    if (status != PN532_OK)
+    {
+        return status;
+    }
+
+    delay_nop(1000);
+    // Command execution can take considerably longer than generation of ACK.
+    dbg_pn532_phase = 4;
+    status = pn532_wait_ready(response_poll_limit);
+    dbg_pn532_response_status = dbg_pn532_raw_status;
+    if (status != PN532_OK)
+    {
+        return status;
+    }
+
+    delay_nop(1000);
+    dbg_pn532_phase = 5;
+    status = pn532_read_response(command, response, response_size, response_len);
+    if (status == PN532_OK)
+    {
+        dbg_pn532_phase = 6;
+    }
+    return status;
+}
+
+/******************************************************************************
+ * @brief Read PN532 firmware information.
+ *
+ * Response data:
+ *
+ *      IC | VER | REV | SUPPORT
+ ******************************************************************************/
+static pn532_status_t pn532_get_firmware_version(void)
+{
+    uint8_t response[4];
+    uint8_t response_len = 0;
+
+    pn532_status_t status;
+
+    status = pn532_command_transaction(PN532_CMD_GET_FIRMWARE, NULL, 0, response, sizeof(response), &response_len, 500U);
+    if (status != PN532_OK)
+    {
+        return status;
+    }
+
+    if (response_len != 4U)
+    {
+        return PN532_ERR_RESPONSE;
+    }
+
+    dbg_fw_ic       = response[0];
+    dbg_fw_version  = response[1];
+    dbg_fw_revision = response[2];
+    dbg_fw_support  = response[3];
+
+    return PN532_OK;
+}
+
+/******************************************************************************
+ * @brief Configure PN532 for normal operating mode.
+ *
+ * PN532 command payload:
+ *
+ *      D4 14 01 14 01
+ *
+ * where:
+ *
+ *      14 = SAMConfiguration command
+ *      01 = Normal mode
+ *      14 = Timeout parameter
+ *      01 = Enable PN532 IRQ handling
+ *
+ * Note:
+ * The Timeout field applies to Virtual Card mode. In Normal mode it does
+ * not control our passive-tag polling timeout.
+ ******************************************************************************/
+static pn532_status_t pn532_sam_config(void)
+{
+    const uint8_t parameters[] =
+    {
+        0x01,       /* Mode: Normal */
+        0x14,       /* Timeout field */
+        0x01        /* PN532 IRQ enabled */
+    };
+
+    uint8_t response_len = 0;
+
+    return pn532_command_transaction(PN532_CMD_SAM_CONFIGURATION, parameters, sizeof(parameters), NULL, 0, &response_len, 500U);
+}
+
+/******************************************************************************
+ * @brief Search for one ISO14443A / MIFARE-compatible passive target.
+ *
+ * InListPassiveTarget command: D4 4A 01 00
+ *      4A = InListPassiveTarget
+ *      01 = detect maximum one target
+ *      00 = 106 kbps ISO14443 Type A
+ *
+ * @param uid      Destination UID array.
+ * @param uid_len  Returned UID length.
+ *
+ * @return
+ *      PN532_OK       Tag found and UID returned
+ *      PN532_NO_TAG   No tag detected
+ *      other          Communication/protocol error
+ ******************************************************************************/
+pn532_status_t pn532_read_passive_target(uint8_t *uid, uint8_t *uid_len)
+{
+    const uint8_t parameters[] =
+    {
+        0x01,       /* MaxTg = detect at most one target */
+        0x00        /* BrTy = ISO14443A, 106 kbps */
+    };
+
+    uint8_t response[32];
+    uint8_t response_len = 0;
+
+    pn532_status_t status;
+
+    status = pn532_command_transaction(PN532_CMD_IN_LIST_PASSIVE, parameters, sizeof(parameters), response, sizeof(response), & response_len, 5000U);
+    if (status != PN532_OK)
+    {
+        return status;
+    }
+
+    // First response byte = NbTg
+    if (response_len < 1U)
+    {
+        return PN532_ERR_RESPONSE;
+    }
+    
+    // NbTg == 0 means the command worked but no NFC target was detected
+    if (response[0] == 0U)
+    {
+        *uid_len = 0;
+        return PN532_NO_TAG;
+    }
+
+    // ISO14443A response layout: response[0] = NbTg | response[1] = Tg | response[2] = SENS_RES byte 0 |response[3] = SENS_RES byte 1 | response[4] = SEL_RES | response[5] = NFCIDLength | response[6...] = NFCID / UID bytes
+    if (response_len < 6U)
+    {
+        return PN532_ERR_RESPONSE;
+    }
+
+    uint8_t nfcid_length = response[5];
+    if (nfcid_length > PN532_MAX_UID_SIZE)
+    {
+        return PN532_ERR_BUFFER;
+    }
+    if (response_len < (uint8_t)(6U + nfcid_length))
+    {
+        return PN532_ERR_RESPONSE;
+    }
+
+    memcpy(uid, &response[6], nfcid_length);
+    *uid_len = nfcid_length;
+
+    return PN532_OK;
+}
+
+static pn532_status_t pn532_release_target(void)
+{
+    const uint8_t parameters[] = { 0x00 }; // Release all known targets.
+    uint8_t response[1];
+    uint8_t response_len = 0;
+
+    pn532_status_t status = pn532_command_transaction(PN532_CMD_IN_RELEASE,
+        parameters, sizeof(parameters), response, sizeof(response), &response_len, 500U);
+    if (status != PN532_OK)
+    {
+        return status;
+    }
+
+    // InRelease response: D5 53 Status. ACK alone does not confirm release.
+    if ((response_len != 1U) || (response[0] != 0x00U))
+    {
+        return PN532_ERR_RESPONSE;
+    }
+
+    return PN532_OK;
+}
+
+pn532_status_t pn532_rf_config_max_retries(void)
+{
+    const uint8_t parameters[] =
+    {
+        0x05,
+        0x00,
+        0x00,
+        0x00
+    };
+
+    uint8_t response_len = 0;
+
+    return pn532_command_transaction(
+        PN532_CMD_RF_CONFIGURATION,
+        parameters,
+        sizeof(parameters),
+        NULL,
+        0,
+        &response_len,
+        500U
+    );
+}
+
+void SPI2_IRQHandler(void)
+{
+    // Call for spi_irq_handle to clear/service the interrupt
+    spi_irq_handle(&spi2_t);
+
+    // Action/Purpose of this interrupt!
+}

@@ -635,3 +635,12 @@ void spi_irq_config(IRQn_Type IRQ_number, uint8_t IRQ_priority, uint8_t state)
         __ISB();  // Synchronize subsequent instruction execution.
     }
 }
+
+void spi_irq_handle(SPI_Handle_t *pSPI_handle)
+{
+    if ()
+    {
+        /* code */
+    }
+    
+}

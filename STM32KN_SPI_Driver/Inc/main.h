@@ -30,6 +30,7 @@ extern "C" {
 #include "mpu_armv7.h"
 
 #include "gpio_driver.h"
+#include "spi_driver.h"
 
 /* User Driver Includes */
 
