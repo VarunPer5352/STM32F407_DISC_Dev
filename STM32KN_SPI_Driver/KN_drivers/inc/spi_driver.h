@@ -144,6 +144,14 @@ uint8_t spi_transfer_data(SPI_RegDef_t *pSPIx_addr, uint8_t pTX_byte);
  */
 void spi_irq_config(IRQn_Type IRQ_number, uint8_t IRQ_priority, uint8_t state);
 void spi_irq_handle(SPI_Handle_t *pSPI_handle);
+void spi_transfer_data_it(SPI_Handle_t *pSPI_handle, uint8_t *pTxBuffer, uint16_t size);
+/* Foreground-only start/poll/abort. Buffers must live until READY or abort.
+ * Start returns 1 if accepted, 0 if busy/invalid. RX may be NULL (discard).
+ * Supported mode: 8-bit full duplex, CRC disabled; driver never controls CS. */
+uint8_t spi_transfer_full_duplex_it(SPI_Handle_t *h, const uint8_t *tx, uint8_t *rx, uint16_t size);
+SPI_StateTypeDef spi_transfer_poll(SPI_Handle_t *h);
+void spi_transfer_abort(SPI_Handle_t *h);
+
 
 /**
  * Future & Advanced API's for tasks!

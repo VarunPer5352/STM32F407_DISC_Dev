@@ -636,11 +636,123 @@ void spi_irq_config(IRQn_Type IRQ_number, uint8_t IRQ_priority, uint8_t state)
     }
 }
 
-void spi_irq_handle(SPI_Handle_t *pSPI_handle)
+/* Interrupt transfers are 8-bit, full duplex. Only one byte is outstanding:
+ * RXNE drains it before TXEIE is rearmed, avoiding overrun even at high SCK
+ * rates / with interrupt latency. No interrupt handler waits on hardware. */
+#define SPI_IT_MASK ((1U << SPI_CR2_TXEIE) | (1U << SPI_CR2_RXNEIE) | (1U << SPI_CR2_ERRIE))
+#define SPI_IT_ERRORS ((1U << SPI_SR_OVR) | (1U << SPI_SR_MODF) | (1U << SPI_SR_FRE))
+
+uint8_t spi_transfer_full_duplex_it(SPI_Handle_t *h, const uint8_t *tx, uint8_t *rx, uint16_t size)
 {
-    if ()
+    uint32_t key = __get_PRIMASK();
+    __disable_irq();
+    if (!size || !tx ||
+        ((h->State != SPI_STATE_READY) && (h->State != SPI_STATE_RESET)) ||
+        (h->Instance->CR1 & ((1U << SPI_CR1_DFF) | (1U << SPI_CR1_BIDIMODE) | (1U << SPI_CR1_RXONLY) | (1U << SPI_CR1_CRCEN))) ||
+        !(h->Instance->CR1 & (1U << SPI_CR1_SPE)) ||
+        (h->Instance->SR & ((1U << SPI_SR_BSY) | (1U << SPI_SR_RXNE) | SPI_IT_ERRORS)))
     {
-        /* code */
+        __set_PRIMASK(key);
+        return 0;
     }
-    
+    h->Instance->CR2 &= ~SPI_IT_MASK;
+    h->pTxBuffPtr = tx;
+    h->pRxBuffPtr = rx; /* NULL: drain and discard incoming bytes. */
+    h->TxXferSize = h->TxXferCount = size;
+    h->RxXferSize = h->RxXferCount = size;
+    h->ErrorCode = 0;
+    h->State = SPI_STATE_BUSY_TX_RX;
+    __DMB();
+    h->Instance->CR2 |= SPI_IT_MASK;
+    __set_PRIMASK(key);
+    return 1;
+}
+
+void spi_irq_handle(SPI_Handle_t *h)
+{
+    uint32_t sr = h->Instance->SR;
+    if ((h->Instance->CR2 & SPI_IT_MASK) == 0U) return;
+    if (sr & SPI_IT_ERRORS)
+    {
+        h->Instance->CR2 &= ~SPI_IT_MASK;
+        h->ErrorCode = sr & SPI_IT_ERRORS;
+        /* OVR is cleared by DR then SR. MODF by SR then CR1 write. */
+        if (sr & (1U << SPI_SR_OVR))
+        {
+            (void)h->Instance->DR;
+            (void)h->Instance->SR;
+        }
+        if (sr & (1U << SPI_SR_MODF)) h->Instance->CR1 = h->Instance->CR1;
+        __DMB();
+        h->State = SPI_STATE_ERROR;
+        return;
+    }
+    if (h->State != SPI_STATE_BUSY_TX_RX)
+    {
+        h->Instance->CR2 &= ~SPI_IT_MASK;
+        return;
+    }
+    if ((sr & (1U << SPI_SR_RXNE)) &&
+        (h->Instance->CR2 & (1U << SPI_CR2_RXNEIE)))
+    {
+        uint8_t value = *(volatile uint8_t *)&h->Instance->DR;
+        if (h->RxXferCount)
+        {
+            if (h->pRxBuffPtr) *h->pRxBuffPtr++ = value;
+            h->RxXferCount--;
+        }
+        if (!h->RxXferCount)
+        {
+            h->Instance->CR2 &= ~SPI_IT_MASK;
+            /* Main context must still observe TXE and !BSY before CS rises. */
+            __DMB();
+            return;
+        }
+        h->Instance->CR2 |= (1U << SPI_CR2_TXEIE);
+    }
+    if ((h->Instance->CR2 & (1U << SPI_CR2_TXEIE)) &&
+        (h->Instance->SR & (1U << SPI_SR_TXE)))
+    {
+        h->Instance->CR2 &= ~(1U << SPI_CR2_TXEIE);
+        if (h->TxXferCount)
+        {
+            *(volatile uint8_t *)&h->Instance->DR = *h->pTxBuffPtr++;
+            h->TxXferCount--;
+        }
+    }
+}
+
+/* Call from foreground. READY means both buffers and the wire are finished. */
+SPI_StateTypeDef spi_transfer_poll(SPI_Handle_t *h)
+{
+    uint32_t key = __get_PRIMASK();
+    __disable_irq();
+    if ((h->State == SPI_STATE_BUSY_TX_RX) &&
+        !h->TxXferCount && !h->RxXferCount &&
+        (h->Instance->SR & (1U << SPI_SR_TXE)) &&
+        !(h->Instance->SR & (1U << SPI_SR_BSY)))
+    {
+        __DMB();
+        h->State = SPI_STATE_READY;
+    }
+    SPI_StateTypeDef state = h->State;
+    __set_PRIMASK(key);
+    return state;
+}
+
+/* Stops further buffer accesses. Caller owns timeout policy and peripheral
+ * reset if BSY is stuck; ABORT deliberately cannot accept another transfer. */
+void spi_transfer_abort(SPI_Handle_t *h)
+{
+    uint32_t key = __get_PRIMASK();
+    __disable_irq();
+    h->Instance->CR2 &= ~SPI_IT_MASK;
+    h->State = SPI_STATE_ABORT;
+    __DMB();
+    __set_PRIMASK(key);
+}
+
+void spi_transfer_data_it(SPI_Handle_t *h, uint8_t *tx, uint16_t size)
+{
+    (void)spi_transfer_full_duplex_it(h, tx, 0, size);
 }
