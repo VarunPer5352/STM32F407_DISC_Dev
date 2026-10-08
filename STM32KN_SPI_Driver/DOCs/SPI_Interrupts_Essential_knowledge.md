@@ -68,3 +68,94 @@ EXTI0_IRQHandler()       ← actual ISR
 You could move the LED logic into a callback, but **you don’t need a callback just because you use interrupts**.
 
 Also, the name alone doesn’t decide: your `gpio_irq_handle()` is called “handle,” but the CPU doesn’t enter it directly. And a callback called from an ISR still executes in interrupt context.
+
+
+Think of the chain:
+
+```text
+1. Configure SPI + NVIC
+       |
+       |   "CPU is ready to respond"
+       v
+2. Start a specific transfer
+       |
+       |   "Here is my buffer, send these N bytes"
+       v
+3. Enable TXE interrupt
+       |
+       v
+4. SPI hardware has TXE = 1
+       |
+       v
+5. IRQ fires
+       |
+       v
+6. ISR writes first byte to SPI->DR
+       |
+       v
+7. Hardware shifts it
+       |
+       v
+8. TXE becomes 1 again
+       |
+       v
+9. IRQ fires again
+       |
+       v
+10. ISR writes next byte
+```
+
+# ------------------------------------------------------------------------------
+**When you're NOT transmitting anything, what is TXE usually?**
+
+`TXE = 1`, because the transmit buffer is empty and ready to accept data.
+
+So imagine the transfer finishes:
+
+```text
+TxXferCount = 0
+TX buffer empty -> TXE = 1
+TXEIE still     = 1
+```
+
+Therefore:
+
+```text
+TXE && TXEIE
+ 1  &&   1
+     ↓
+interrupt request!
+```
+
+ISR runs, finds nothing to send, returns...
+
+But TXE is **still 1** because nobody wrote another byte to DR.
+
+So:
+
+```text
+IRQ -> ISR -> return
+        ↓
+TXE still 1 + TXEIE still 1
+        ↓
+IRQ again
+        ↓
+ISR again
+...
+```
+
+You can basically create an **interrupt storm** and waste the CPU.
+
+That's why the pattern is:
+
+```text
+Starting TX:
+    TXEIE = 1
+
+Last byte has been supplied:
+    TXEIE = 0
+```
+
+Notice we don't clear **TXE** ourselves. We disable our interest in TXE by clearing **TXEIE**.
+
+Small question: when `spi_transfer_data_it()` enables `TXEIE`, and TXE was already `1` because SPI was idle, what do you expect to happen immediately?
