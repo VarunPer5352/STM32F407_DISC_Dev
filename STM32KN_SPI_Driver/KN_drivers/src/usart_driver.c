@@ -171,5 +171,17 @@ void usart_init(USART_Handle_t *pUSARTx_handle)
     
     pUSARTx_handle->pUSARTx->USART_CR3 = tmp_USARTx_CR3;
 
-    // Configuration of BRR(Baudrate register) {Later}
+    // Configuration of BRR(Baudrate register)
+    // BRR for the default 16 MHz peripheral clock, oversampling by 16
+    {
+        uint32_t usartdiv = 16000000U / (16U * pUSARTx_handle->USART_Config.USART_Baud);
+        uint32_t remainder = 16000000U % (16U * pUSARTx_handle->USART_Config.USART_Baud);
+        uint32_t fraction = (remainder * 16U) / (16U * pUSARTx_handle->USART_Config.USART_Baud);
+
+        pUSARTx_handle->pUSARTx->USART_BRR = (usartdiv << USART_BRR_DIV_MANTISSA) |
+                                             (fraction << USART_BRR_DIV_FRACTION);
+    }
+
+    /* Enable the USART after all configuration registers are programmed. */
+    pUSARTx_handle->pUSARTx->USART_CR1 |= (1U << USART_CR1_UE);
 }
