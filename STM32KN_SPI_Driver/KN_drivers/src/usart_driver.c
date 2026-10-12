@@ -185,3 +185,46 @@ void usart_init(USART_Handle_t *pUSARTx_handle)
     /* Enable the USART after all configuration registers are programmed. */
     pUSARTx_handle->pUSARTx->USART_CR1 |= (1U << USART_CR1_UE);
 }
+
+/***************************************************************************
+ * @brief       De-initializes the selected USART/UART peripheral.
+ *
+ * @details     Resets the peripheral registers and disables its peripheral
+ *              clock. This returns the USART/UART peripheral to its reset
+ *              state.
+ *
+ * @param[in]   pUSARTx_addr
+ *              Pointer to the USART/UART peripheral to de-initialize.
+ *
+ * @return      None
+ *
+ * @note        The reset and clock-disable implementation will be added
+ *              here after the initialization flow is finalized.
+ ***************************************************************************/
+void usart_deinit(USART_RegDef_t *pUSARTx_addr)
+{
+    if (pUSARTx_addr == USART1)
+    {
+        USART1_REG_RESET();
+    }
+    else if (pUSARTx_addr == USART2)
+    {
+        USART2_REG_RESET();
+    }
+    else if (pUSARTx_addr == USART3)
+    {
+        USART3_REG_RESET();
+    }
+    else if (pUSARTx_addr == UART4)
+    {
+        UART4_REG_RESET();
+    }
+    else if (pUSARTx_addr == UART5)
+    {
+        UART5_REG_RESET();
+    }
+    else if (pUSARTx_addr == USART6)
+    {
+        USART6_REG_RESET();
+    }
+}
