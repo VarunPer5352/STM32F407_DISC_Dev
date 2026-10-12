@@ -228,3 +228,32 @@ void usart_deinit(USART_RegDef_t *pUSARTx_addr)
         USART6_REG_RESET();
     }
 }
+
+/***************************************************************************
+ * @brief       Sends data through the selected USART/UART peripheral.
+ *
+ * @details     Transmits the requested number of bytes from the supplied
+ *              buffer using blocking mode.
+ *
+ * @param[in]   pUSARTx_addr  Pointer to the USART/UART peripheral.
+ * @param[in]   pTX_buffer    Pointer to the transmit data buffer.
+ * @param[in]   data_len      Number of bytes to transmit.
+ *
+ * @return      None
+ ***************************************************************************/
+void usart_send_data(USART_RegDef_t *pUSARTx_addr, uint8_t *pTX_buffer, uint32_t data_len)
+{
+    uint32_t index;
+
+    for (index = 0U; index < data_len; index++)
+    {
+        /* Wait until the transmit data register is empty. */
+        while (!(pUSARTx_addr->USART_SR & (1U << USART_SR_TXE))) {}
+
+        /* Write the next byte to the USART data register. */
+        pUSARTx_addr->USART_DR = pTX_buffer[index];
+    }
+
+    /* Wait until the final byte has completely finished transmitting. */
+    while (!(pUSARTx_addr->USART_SR & (1U << USART_SR_TC))) {}
+}
