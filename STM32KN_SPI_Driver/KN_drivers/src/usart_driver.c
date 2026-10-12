@@ -106,17 +106,17 @@ void usart_init(USART_Handle_t *pUSARTx_handle)
 
     if (pUSARTx_handle->USART_Config.USART_Mode == USART_MODE_ONLY_TX)
     {
-        // Enable the Receiver bit field
-        tmpUSARTx_CR1 |= (1U << USART_CR1_RE);
+        // Enable the transmitter
+        tmpUSARTx_CR1 |= (1U << USART_CR1_TE);
     }
     else if (pUSARTx_handle->USART_Config.USART_Mode == USART_MODE_ONLY_RX)
     {
-        // Enable the Transmitter bit field
-        tmpUSARTx_CR1 |= (1U << USART_CR1_TE);
+        // Enable the receiver
+        tmpUSARTx_CR1 |= (1U << USART_CR1_RE);
     }
     else if (pUSARTx_handle->USART_Config.USART_Mode == USART_MODE_TXRX)
     {
-        // // Enable the Receiver & Transmitter bit field
+        // Enable the Receiver & Transmitter bit field
         tmpUSARTx_CR1 |= (1U << USART_CR1_RE) | (1U << USART_CR1_TE);
     }
     
@@ -124,17 +124,15 @@ void usart_init(USART_Handle_t *pUSARTx_handle)
     tmpUSARTx_CR1 |= (pUSARTx_handle->USART_Config.USART_WordLength << USART_CR1_M);
 
     // Parity settings
-    tmpUSARTx_CR1 |= (pUSARTx_handle->USART_Config.USART_ParityControl << USART_CR1_PCE);
-    
-    // If parity bit is set, set the parity
-    if (tmpUSARTx_CR1 & (1U << USART_CR1_PCE))
+    if (pUSARTx_handle->USART_Config.USART_ParityControl != USART_PARITY_DISABLE)
     {
+        tmpUSARTx_CR1 |= (1U << USART_CR1_PCE);
         if (pUSARTx_handle->USART_Config.USART_ParityControl == USART_PARITY_EN_ODD)
         {
             // Odd Parity
             tmpUSARTx_CR1 |= (1U << USART_CR1_PS);
         }
-        else if (pUSARTx_handle->USART_Config.USART_ParityControl == USART_PARITY_EN_ODD)
+        else if (pUSARTx_handle->USART_Config.USART_ParityControl == USART_PARITY_EN_EVEN)
         {
             // Even Parity
             tmpUSARTx_CR1 &= ~(1U << USART_CR1_PS);
