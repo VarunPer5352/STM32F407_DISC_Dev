@@ -490,4 +490,23 @@ typedef struct
 #define SPI3_REG_RESET()   do{ (RCC->APB1RSTR |= (1U << 15)); (RCC->APB1RSTR &= ~(1U << 15)); } while (0)
 #define SPI4_REG_RESET()   do{ (RCC->APB2RSTR |= (1U << 13)); (RCC->APB2RSTR &= ~(1U << 13)); } while (0)
 
+
+/**
+  * @brief Universal Asynchronous Receiver/Transmitter
+  */
+
+/**
+  * @brief  USART handle Structure definition
+  */
+typedef struct
+{
+  __IO uint32_t USART_SR;        /*!< USART status register,                              Address offset: 0x00 */
+  __IO uint32_t USART_DR;        /*!< USART data register,                                Address offset: 0x04 */
+  __IO uint32_t USART_BRR;         /*!< USART baud rate register,                           Address offset: 0x08 */
+  __IO uint32_t USART_CR1;         /*!< USART control register 1,                           Address offset: 0x0C */
+  __IO uint32_t USART_CR2;      /*!< USART control register 2,                           Address offset: 0x10 */
+  __IO uint32_t USART_CR3;     /*!< USART control register 3,                           Address offset: 0x14 */
+  __IO uint32_t USART_GTPR;     /*!< USART guard time and prescaler register,             Address offset: 0x18 */
+} USART_RegDef_t;
+
 #endif /* INC_STM32F407XX_H_ */
