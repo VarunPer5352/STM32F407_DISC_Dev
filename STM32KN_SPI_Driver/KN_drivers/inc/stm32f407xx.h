@@ -509,4 +509,35 @@ typedef struct
   __IO uint32_t USART_GTPR;     /*!< USART guard time and prescaler register,             Address offset: 0x18 */
 } USART_RegDef_t;
 
+/* Peripheral Clock Enable & Disable macros for USART/UART peripherals */
+#define USART1_PCLK_EN()   (RCC->APB2ENR |= (1U << 4))
+#define USART6_PCLK_EN()   (RCC->APB2ENR |= (1U << 5))
+#define USART2_PCLK_EN()   (RCC->APB1ENR |= (1U << 17))
+#define USART3_PCLK_EN()   (RCC->APB1ENR |= (1U << 18))
+#define UART4_PCLK_EN()    (RCC->APB1ENR |= (1U << 19))
+#define UART5_PCLK_EN()    (RCC->APB1ENR |= (1U << 20))
+
+#define USART1_PCLK_DI()   (RCC->APB2ENR &= ~(1U << 4))
+#define USART6_PCLK_DI()   (RCC->APB2ENR &= ~(1U << 5))
+#define USART2_PCLK_DI()   (RCC->APB1ENR &= ~(1U << 17))
+#define USART3_PCLK_DI()   (RCC->APB1ENR &= ~(1U << 18))
+#define UART4_PCLK_DI()    (RCC->APB1ENR &= ~(1U << 19))
+#define UART5_PCLK_DI()    (RCC->APB1ENR &= ~(1U << 20))
+
+/* USART/UART peripheral register definitions */
+#define USART1              ((USART_RegDef_t *)USART1_BASE)
+#define USART2              ((USART_RegDef_t *)USART2_BASE)
+#define USART3              ((USART_RegDef_t *)USART3_BASE)
+#define UART4               ((USART_RegDef_t *)UART4_BASE)
+#define UART5               ((USART_RegDef_t *)UART5_BASE)
+#define USART6              ((USART_RegDef_t *)USART6_BASE)
+
+/* USART/UART peripheral register reset macros */
+#define USART1_REG_RESET()  do{ (RCC->APB2RSTR |= (1U << 4));  (RCC->APB2RSTR &= ~(1U << 4));  } while (0)
+#define USART6_REG_RESET()  do{ (RCC->APB2RSTR |= (1U << 5));  (RCC->APB2RSTR &= ~(1U << 5));  } while (0)
+#define USART2_REG_RESET()  do{ (RCC->APB1RSTR |= (1U << 17)); (RCC->APB1RSTR &= ~(1U << 17)); } while (0)
+#define USART3_REG_RESET()  do{ (RCC->APB1RSTR |= (1U << 18)); (RCC->APB1RSTR &= ~(1U << 18)); } while (0)
+#define UART4_REG_RESET()   do{ (RCC->APB1RSTR |= (1U << 19)); (RCC->APB1RSTR &= ~(1U << 19)); } while (0)
+#define UART5_REG_RESET()   do{ (RCC->APB1RSTR |= (1U << 20)); (RCC->APB1RSTR &= ~(1U << 20)); } while (0)
+
 #endif /* INC_STM32F407XX_H_ */
