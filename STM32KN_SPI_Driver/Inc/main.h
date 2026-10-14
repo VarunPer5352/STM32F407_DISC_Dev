@@ -31,6 +31,7 @@ extern "C" {
 
 #include "gpio_driver.h"
 #include "spi_driver.h"
+#include "usart_driver.h"
 
 /* User Driver Includes */
 
