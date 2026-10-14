@@ -68,6 +68,49 @@ volatile uint32_t dbg_pn532_status_ff_count = 0;
 volatile uint32_t dbg_pn532_tag_count = 0;
 volatile uint32_t dbg_pn532_no_tag_count = 0;
 
+static USART_Handle_t usart2_debug;
+
+static void usart2_debug_init(void)
+{
+    GPIO_Handle_t gpio = {0};
+    gpio.pGPIOx_addr = GPIOA;
+    gpio.pin_config.Pin = GPIO_PIN_2;
+    gpio.pin_config.Mode = GPIO_MODE_ALTFN;
+    gpio.pin_config.Alternate = GPIO_AF7_USART2;
+    gpio.pin_config.OPType = GPIO_OP_PP;
+    gpio.pin_config.Pull = GPIO_PULLUP;
+    gpio.pin_config.Speed = GPIO_SPEED_FREQ_HIGH;
+    gpio_init(&gpio);
+
+    usart2_debug.pUSARTx = USART2;
+    usart2_debug.USART_Config.USART_Mode = USART_MODE_ONLY_TX;
+    usart2_debug.USART_Config.USART_Baud = USART_STD_BAUD_115200;
+    usart2_debug.USART_Config.USART_NoOfStopBits = USART_STOPBITS_1;
+    usart2_debug.USART_Config.USART_WordLength = USART_WORDLEN_8BITS;
+    usart2_debug.USART_Config.USART_ParityControl = USART_PARITY_DISABLE;
+    usart2_debug.USART_Config.USART_HWFlowControl = USART_HW_FLOW_CTRL_NONE;
+    usart_init(&usart2_debug);
+}
+
+static void usart2_debug_tag(const volatile uint8_t *uid, uint8_t length)
+{
+    static const uint8_t hex[] = "0123456789ABCDEF";
+    uint8_t message[4U + (PN532_MAX_UID_SIZE * 3U) + 2U];
+    uint32_t pos = 0U;
+    uint8_t i;
+
+    message[pos++] = 'U';; message[pos++] = 'I'; message[pos++] = 'D'; message[pos++] = ':';
+    for (i = 0U; i < length; i++)
+    {
+        message[pos++] = hex[(uid[i] >> 4) & 0x0FU];
+        message[pos++] = hex[uid[i] & 0x0FU];
+        if (i + 1U < length) message[pos++] = ':';
+    }
+    message[pos++] = '\r';
+    message[pos++] = '\n';
+    usart_send_data(USART2, message, pos);
+}
+
 void SystemInit(void)
 {
 #if (__FPU_PRESENT == 1U) && (__FPU_USED == 1U)
@@ -484,6 +527,7 @@ static pn532_status_t consume_target(void)
     for (uint8_t i = 0; i < len; i++) dbg_uid[i] = pn.response[6U + i];
     dbg_uid_length = len;
     dbg_pn532_tag_count++;
+    usart2_debug_tag(dbg_uid, dbg_uid_length);
     return PN532_OK;
 }
 
@@ -583,6 +627,7 @@ static void app_poll(uint32_t now)
 
 int main(void)
 {
+    usart2_debug_init();
     spi2_gpio_init(&spi_gpio_t);
     spi2_periph_init(&spi2_t);
     spi2_t.State = SPI_STATE_READY;
